@@ -1,4 +1,4 @@
-# Smart Pro System 3.0.0 — Foundation
+# Smart Pro System 3.0.1 — Foundation
 
 Η 3.0.0 είναι η πρώτη customer-first βάση. Δεν είναι απλή μετονομασία του Smart Pro Tools 2.4.58.
 

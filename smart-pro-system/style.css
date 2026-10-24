@@ -1,14 +1,14 @@
 :root {
     --bg-color: #f4f6f9; --container-bg: #ffffff; --text-color: #333333; --text-muted: #777777;
     --border-color: #eeeeee; --box-bg: #f8f9fa; --btn-bg: #1976d2; --btn-text: #ffffff;
-    --success-bg: #e8f5e9; --success-text: #1b5e20; --error-bg: #ffebee; --error-text: #c62828;
+    --success-bg: #e8f5e9; --success-text: #1b5e20; --error-bg: #ffebee; --error-text: #c62828; --info-bg: #e3f2fd; --info-text: #0d47a1;
 }
 @media (prefers-color-scheme: dark) {
     :root {
         --bg-color: #121212; --container-bg: #1e1e1e; --text-color: #e0e0e0; --text-muted: #aaaaaa;
         --border-color: #333333; --box-bg: #2a2a2a; --btn-bg: #1976d2;
         --success-bg: rgba(76, 175, 80, 0.15); --success-text: #a5d6a7;
-        --error-bg: rgba(244, 67, 54, 0.1); --error-text: #e57373;
+        --error-bg: rgba(244, 67, 54, 0.1); --error-text: #e57373; --info-bg: rgba(33, 150, 243, 0.12); --info-text: #90caf9;
     }
 }
 html { min-height: 100%; overflow-y: auto; }
@@ -26,6 +26,7 @@ h3 { margin: 0 0 15px 0; text-align: center; color: var(--text-muted); font-size
 .support-badge.sent { background: #555; cursor: not-allowed; }
 .status { background: var(--success-bg); color: var(--success-text); padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px; border: 1px solid currentColor; font-size: 14px; }
 .status.pending { background: var(--error-bg); color: var(--error-text); font-weight: bold; }
+.status.neutral { background: var(--info-bg); color: var(--info-text); font-weight: 600; }
 .brand-text { font-weight: 900; letter-spacing: 0.5px; text-decoration: underline; text-decoration-color: var(--btn-bg); text-decoration-thickness: 2px; }
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; }
 .info-panel { background: var(--box-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 15px; }

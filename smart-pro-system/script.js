@@ -226,8 +226,10 @@ function portalSubscriptionDaysText(subscription) {
 function updateCompactSubscription(subscription) {
     const uiPlan = document.getElementById('uiCompactPlan');
     const uiDays = document.getElementById('uiCompactDays');
+    const uiMetaTitle = document.getElementById('uiCompactMetaTitle');
     const compactBox = document.getElementById('compactSubInfo');
     if (!uiPlan || !uiDays || !compactBox || !subscription || !subscription.available) return false;
+    if (uiMetaTitle) uiMetaTitle.innerText = 'Υπόλοιπο ημερών';
 
     const isTrial = portalTrialActive(subscription);
     const planLabel = subscription.plan_label || (subscription.plan === 'advanced' ? 'Smart Pro System Advanced' : 'Smart Pro System Care');
@@ -480,9 +482,11 @@ function renderPortalStatus(status) {
         if (message) { message.textContent = ''; message.className = 'portal-link-message'; }
         const uiPlan = document.getElementById('uiCompactPlan');
         const uiDays = document.getElementById('uiCompactDays');
+        const uiMetaTitle = document.getElementById('uiCompactMetaTitle');
         const compactBox = document.getElementById('compactSubInfo');
-        if (uiPlan) { uiPlan.innerText = '🔗 ΧΩΡΙΣ ΣΥΝΔΕΣΗ'; uiPlan.style.color = '#78909c'; }
-        if (uiDays) { uiDays.innerText = '--'; uiDays.style.color = '#cbd5e1'; }
+        if (uiPlan) { uiPlan.innerText = 'SMART PRO PORTAL'; uiPlan.style.color = '#78909c'; }
+        if (uiMetaTitle) uiMetaTitle.innerText = 'Κατάσταση';
+        if (uiDays) { uiDays.innerText = 'Αναμονή σύνδεσης'; uiDays.style.color = '#cbd5e1'; }
         if (compactBox) compactBox.style.borderLeftColor = '#78909c';
         renderPortalSubscription(null);
     }
@@ -509,6 +513,11 @@ function updatePortalRequestUi(status) {
         button.title = active && active.category_label
             ? `${active.category_label}${active.message ? ' — ' + active.message : ''}`
             : 'Υπάρχει ενεργό αίτημα στο Smart Pro Portal.';
+    } else if (!status || !status.connected) {
+        button.innerText = '🔗 Υποστήριξη μετά τη σύνδεση';
+        button.classList.add('sent');
+        button.style.pointerEvents = 'none';
+        button.title = 'Συνδέστε πρώτα την εγκατάσταση με το Smart Pro Portal.';
     } else if (!supportAllowed) {
         button.innerText = '🔒 Υποστήριξη μη ενεργή';
         button.classList.add('sent');
@@ -1167,9 +1176,15 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
     const statusMsg = document.getElementById('statusMessage'); const supportBtn = document.getElementById('supportBtn');
     const wdBox = document.getElementById('watchdogStateRow'); const wdIcon = document.getElementById('wdIcon'); const wdText = document.getElementById('wdText');
     
+    const portalConnected = !!(currentPortalStatus && currentPortalStatus.connected);
+
     if (wdBox && wdIcon && wdText) {
         const guardianAllowed = portalServiceAllowed('guardian_monitoring');
-        if (!guardianAllowed) {
+        if (!portalConnected) {
+            wdBox.className = 'health-row';
+            wdIcon.innerText = '🔗';
+            wdText.innerHTML = 'Φρουρός: <strong>Μετά τη σύνδεση με το Portal</strong>';
+        } else if (!guardianAllowed) {
             wdBox.className = 'health-row warning';
             wdIcon.innerText = '🔒';
             wdText.innerHTML = 'Φρουρός: <strong>Μη ενεργός από τη συνδρομή</strong>';
@@ -1198,7 +1213,7 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
         if (guardianAllowed && watchdogEnabled && tamperList.length === 0) { statusMsg.innerHTML = "⚠️ <strong>Εντοπίστηκε απώλεια.</strong> Ο Φρουρός τη διαχειρίζεται αυτόματα. Μπορείτε παράλληλα να ανοίξετε ξεχωριστό αίτημα υποστήριξης."; statusMsg.className = 'status pending'; if (!hasPendingRequest) { supportBtn.innerText = "👨‍🔧 Αίτημα Υποστήριξης"; supportBtn.classList.remove('sent'); supportBtn.style.pointerEvents = 'auto'; } } 
         else if (tamperList.length === 0) { statusMsg.innerHTML = "⚠️ <strong>Εντοπίστηκε σφάλμα.</strong> Πατήστε το κουμπί."; statusMsg.className = 'status pending'; if (!hasPendingRequest) { supportBtn.innerText = "👨‍🔧 Αίτημα Υποστήριξης"; supportBtn.classList.remove('sent'); supportBtn.style.pointerEvents = 'auto'; } }
     } else { 
-        devBox.className = 'health-row'; devText.innerHTML = "Όλες οι συσκευές Online"; 
+        devBox.className = 'health-row'; devText.innerHTML = "Δεν εντοπίστηκαν offline συσκευές"; 
         if (hasPendingRequest && tamperList.length === 0) {
             const activeRequest = portalActiveRequest();
             const activeCode = activeRequest && activeRequest.code ? activeRequest.code : 'Ενεργό αίτημα';
@@ -1207,7 +1222,10 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
             statusMsg.className = 'status pending';
         } else if (tamperList.length === 0) {
             const subscription = currentPortalStatus && currentPortalStatus.subscription;
-            if (portalTrialActive(subscription)) {
+            if (!portalConnected) {
+                statusMsg.innerHTML = "ℹ️ Η εγκατάσταση δεν έχει συνδεθεί ακόμη με το Smart Pro Portal. Συνδέστε την για να εμφανιστεί η πραγματική κατάσταση συνδρομής, Φρουρού και υπηρεσιών.";
+                statusMsg.className = 'status neutral';
+            } else if (portalTrialActive(subscription)) {
                 statusMsg.innerHTML = "ℹ️ Η εγκατάσταση είναι συνδεδεμένη και συγχρονίζεται με το Smart Pro Portal. Η δοκιμαστική περίοδος δεν ενεργοποιεί πληρωμένες λειτουργίες.";
                 statusMsg.className = 'status pending';
             } else {
@@ -1226,7 +1244,7 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
             let batHTML = `<details style="margin-top: 5px; cursor: pointer; text-align: left; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; font-size: 0.9em;"><summary style="font-weight: bold;">Μπαταρίες (${batteries})</summary><ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">`;
             batteryList.forEach(dev => { batHTML += `<li style="padding: 2px 0;">${dev}</li>`; }); batHTML += `</ul></details>`;
             batText.innerHTML = `<strong>${batteries} μπαταρίες χαμηλές</strong><br>${batHTML}`;
-        } else { batBox.className = 'health-row'; batText.innerText = "Μπαταρίες ΟΚ"; }
+        } else { batBox.className = 'health-row'; batText.innerText = "Δεν εντοπίστηκαν χαμηλές μπαταρίες"; }
     }
     // Health rendering must never re-enable support when the Portal contract blocks it.
     updatePortalRequestUi(currentPortalStatus);

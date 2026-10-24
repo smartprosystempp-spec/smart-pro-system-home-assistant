@@ -1,8 +1,8 @@
-# Smart Pro System 3.0.0
+# Smart Pro System 3.0.1
 
 Το Smart Pro System είναι ο τοπικός κόμβος της εγκατάστασης Home Assistant για σύνδεση με το Smart Pro Portal, κατάσταση υπηρεσιών, Guardian, Managed Backup, Managed External URL και ελεγχόμενη τεχνική υποστήριξη.
 
-Η 3.0.0 ξεκινά τη νέα customer-first γενιά. Το εμφανιζόμενο όνομα αλλάζει σε **Smart Pro System**, ενώ το εσωτερικό slug παραμένει `smart_pro_tools` για τεχνική συνέχεια.
+Η 3.0.1 συνεχίζει τη νέα customer-first γενιά. Το εμφανιζόμενο όνομα αλλάζει σε **Smart Pro System**, ενώ το εσωτερικό slug παραμένει `smart_pro_tools` για τεχνική συνέχεια.
 
 ## Τι βλέπει ο πελάτης
 - κατάσταση σύνδεσης με Portal,

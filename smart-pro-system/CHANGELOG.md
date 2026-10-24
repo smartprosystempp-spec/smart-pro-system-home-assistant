@@ -1,3 +1,12 @@
+## 3.0.1 — Unpaired State Semantics
+
+- Fixes the first-run/unpaired UI so it never describes the installation as connected or subscription-blocked before Portal pairing.
+- Support CTA now says that support becomes available after Portal connection instead of implying an inactive subscription.
+- Guardian status now shows “Μετά τη σύνδεση με το Portal” while unpaired.
+- Replaces false-positive “all online / batteries OK” wording with observation-safe local-health wording.
+- Adds neutral informational styling for the unpaired health banner.
+- No pairing, Portal contract, subscription, Guardian policy, Managed Support, Tunnel, Backup or External URL runtime changes.
+
 ## 3.0.0 — Smart Pro System vNext Foundation
 
 - Starts the customer-facing **Smart Pro System** generation while preserving the technical slug `smart_pro_tools`.
