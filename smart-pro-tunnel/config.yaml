@@ -1,6 +1,6 @@
 name: "Smart Pro Tunnel"
 description: "Isolated outbound private tunnel runtime for Smart Pro Managed External URL."
-version: "0.1.6"
+version: "0.1.7"
 slug: "smart_pro_tunnel"
 init: false
 startup: application
@@ -10,6 +10,7 @@ stage: experimental
 arch:
   - aarch64
   - amd64
+image: "ghcr.io/smartprosystempp-spec/smart-pro-tunnel"
 
 privileged:
   - NET_ADMIN
