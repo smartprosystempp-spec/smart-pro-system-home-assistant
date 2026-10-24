@@ -1,19 +1,18 @@
 # Smart Pro System — Home Assistant
 
-Επίσημο Home Assistant repository για την οικογένεια Smart Pro System.
+Επίσημο Home Assistant repository για την οικογένεια **Smart Pro System**.
 
-## Περιεχόμενο της πρώτης vNext βάσης
+## Περιεχόμενο
 
 - **Smart Pro System 3.0.0** — ο τοπικός κόμβος σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασης.
-- **Smart Pro Tunnel 0.1.6** — απομονωμένο outbound tunnel runtime για Managed External URL.
-
-Το **Smart Pro Managed Support** θα προστεθεί στο ίδιο repository πριν από το τελικό public-installation checkpoint, πάνω στην ήδη επαληθευμένη 3.19.1 βάση. Η σταδιακή εισαγωγή γίνεται σκόπιμα ώστε να ελεγχθεί πρώτα η νέα tokenless distribution identity και το Smart Pro System 3.0.0 foundation χωρίς να αλλάξει ο δοκιμασμένος Managed runtime.
+- **Smart Pro Tunnel 0.1.6** — απομονωμένο outbound tunnel runtime για το Managed External URL.
+- **Smart Pro Managed Support 3.19.1** — ασφαλές managed support runtime με σταθερή ταυτότητα και ελεγχόμενη απομακρυσμένη υποστήριξη.
 
 ## Αρχές vNext
 
 - σταθερό δημόσιο repository URL χωρίς GitHub PAT/token,
 - το customer-facing όνομα είναι **Smart Pro System**, ενώ το εσωτερικό add-on slug παραμένει `smart_pro_tools`,
-- υποστήριξη connected subscriber, standalone/one-off και unpaired εγκατάστασης,
-- καθαρή διάκριση entitlement από πραγματικό runtime,
-- secrets δεν ενσωματώνονται στο repository ή στο UI,
-- εμπορικές ενέργειες παραμένουν στο Smart Pro Portal.
+- υποστήριξη συνδρομητικής, standalone/one-off και μη συνδεδεμένης εγκατάστασης,
+- καθαρή διάκριση μεταξύ δικαιώματος υπηρεσίας και πραγματικού runtime,
+- secrets δεν ενσωματώνονται στο repository ή στο customer UI,
+- οι εμπορικές ενέργειες και η διαχείριση λογαριασμού παραμένουν στο Smart Pro Portal.
