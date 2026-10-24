@@ -1,6 +1,6 @@
 name: "Smart Pro System"
 description: "Κέντρο σύνδεσης, κατάστασης και υπηρεσιών Smart Pro System για Home Assistant."
-version: "3.0.1"
+version: "3.0.2"
 slug: "smart_pro_tools"
 init: false
 panel_icon: "mdi:home-cog"
@@ -22,6 +22,7 @@ arch:
   - armhf
   - armv7
   - i386
+image: "ghcr.io/smartprosystempp-spec/smart-pro-system"
 
 options:
   ha_token: ""
