@@ -4,9 +4,9 @@
 
 ## Περιεχόμενο
 
-- **Smart Pro System 3.0.0** — ο τοπικός κόμβος σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασης.
-- **Smart Pro Tunnel 0.1.6** — απομονωμένο outbound tunnel runtime για το Managed External URL.
-- **Smart Pro Managed Support 3.19.1** — ασφαλές managed support runtime με σταθερή ταυτότητα και ελεγχόμενη απομακρυσμένη υποστήριξη.
+- **Smart Pro System 3.0.3** — ο τοπικός κόμβος σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασης.
+- **Smart Pro Tunnel 0.1.7** — απομονωμένο outbound tunnel runtime για το Managed External URL.
+- **Smart Pro Managed Support 3.19.2** — ασφαλές managed support runtime με σταθερή ταυτότητα και ελεγχόμενη απομακρυσμένη υποστήριξη.
 
 ## Αρχές vNext
 
