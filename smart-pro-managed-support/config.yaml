@@ -1,12 +1,13 @@
 name: "Smart Pro Managed Support"
 description: "Ασφαλής Managed υποστήριξη Smart Pro System με σταθερή ταυτότητα, αυτόματη επανασύνδεση και τεκμηριωμένα διαγνωστικά."
-version: "3.19.1"
+version: "3.19.2"
 slug: "smart_pro_managed_support"
 arch:
   - amd64
   - aarch64
+image: "ghcr.io/smartprosystempp-spec/smart-pro-managed-support"
 startup: application
-boot: auto
+boot: manual
 host_network: false
 stage: experimental
 url: "https://smart-pro-system.gr/remote-support/"
