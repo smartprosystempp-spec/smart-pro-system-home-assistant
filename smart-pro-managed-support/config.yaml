@@ -1,0 +1,21 @@
+name: "Smart Pro Managed Support"
+description: "Ασφαλής Managed υποστήριξη Smart Pro System με σταθερή ταυτότητα, αυτόματη επανασύνδεση και τεκμηριωμένα διαγνωστικά."
+version: "3.19.1"
+slug: "smart_pro_managed_support"
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+host_network: false
+stage: experimental
+url: "https://smart-pro-system.gr/remote-support/"
+ingress: true
+ingress_port: 8098
+panel_icon: "mdi:shield-check"
+panel_title: "Smart Pro Managed Support"
+panel_admin: false
+map:
+  - type: share
+    read_only: true
+schema: false
