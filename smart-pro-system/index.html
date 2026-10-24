@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Smart Pro System</title>
+    <link rel="stylesheet" href="style.css?v=3000">
+</head>
+<body class="sps-vnext">
+    <div class="container sps-shell">
+        <header class="sps-header">
+            <div class="sps-brand">
+                <div class="sps-brand-mark" aria-hidden="true">SP</div>
+                <div>
+                    <div class="sps-eyebrow">SMART PRO SYSTEM · HOME ASSISTANT</div>
+                    <h1 onclick="checkTechAccess()">Smart Pro System</h1>
+                    <p>Κέντρο σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασής σας.</p>
+                </div>
+            </div>
+            <div class="sps-header-actions">
+                <button class="sps-action primary" id="supportBtn" onclick="openModal()">Αίτημα υποστήριξης</button>
+                <a href="https://smart-pro-system.gr/smart-pro-portal-preview/" id="portalFolderLink" target="_blank" class="sps-action">Άνοιγμα Portal</a>
+            </div>
+        </header>
+
+        <section class="sps-state-strip">
+            <div class="sps-mode">
+                <span>Τρόπος χρήσης</span>
+                <strong id="customerModeBadge">Έλεγχος...</strong>
+            </div>
+            <div class="sps-plan" id="compactSubInfo">
+                <span id="uiCompactPlan">Χωρίς σύνδεση</span>
+                <small>Υπόλοιπο ημερών: <b id="uiCompactDays">--</b></small>
+            </div>
+            <div class="sps-installation-mini">
+                <span>Εγκατάσταση</span>
+                <strong id="uiInstallationName">Δεν έχει συνδεθεί</strong>
+                <small id="uiCustomerNameDisplay"></small>
+            </div>
+        </section>
+
+        <section class="portal-link-card sps-connection-card" id="portalConnectionCard">
+            <div class="portal-link-header">
+                <div>
+                    <div class="portal-link-eyebrow">ΣΥΝΔΕΣΗ SMART PRO PORTAL</div>
+                    <strong>Η ταυτότητα της εγκατάστασης</strong>
+                </div>
+                <span class="portal-link-status" id="portalConnectionBadge">Έλεγχος...</span>
+            </div>
+            <div id="portalDisconnectedView">
+                <p class="sps-help-text">Χρησιμοποιήστε τον προσωρινό κωδικό που εμφανίζεται στο Smart Pro Portal. Η σύνδεση αυτή θα χρησιμοποιείται και στις μελλοντικές ροές επαναφοράς ή αντικατάστασης συσκευής.</p>
+                <div class="portal-pair-row">
+                    <input type="text" id="portalPairingCode" maxlength="9" placeholder="SP-XXXXXX" autocomplete="off" spellcheck="false">
+                    <button type="button" id="portalPairButton" onclick="pairWithPortal()">Σύνδεση</button>
+                </div>
+            </div>
+            <div id="portalConnectedView" style="display:none;">
+                <div class="portal-connected-grid">
+                    <div><span>Installation ID</span><strong id="portalInstallationId">--</strong></div>
+                    <div><span>Τελευταίος συγχρονισμός</span><strong id="portalLastHeartbeat">--</strong></div>
+                </div>
+                <div class="portal-subscription-panel" id="portalSubscriptionPanel" style="display:none;">
+                    <div class="portal-subscription-heading">
+                        <div><span>ΠΑΚΕΤΟ SMART PRO</span><strong id="portalSubscriptionPlan">--</strong></div>
+                        <span class="portal-subscription-status" id="portalSubscriptionStatus">--</span>
+                    </div>
+                    <div class="portal-subscription-grid">
+                        <div><span>Υπόλοιπο</span><strong id="portalSubscriptionDays">--</strong></div>
+                        <div><span>Ημερομηνία</span><strong id="portalSubscriptionDate">--</strong></div>
+                        <div><span>Επαλήθευση</span><strong id="portalSubscriptionVerification">--</strong></div>
+                        <div class="sps-hidden-legacy"><span>Managed entitlement</span><strong id="portalManagedPolicy">--</strong></div>
+                        <div class="sps-hidden-legacy"><span>Managed runtime</span><strong id="portalManagedRuntime">--</strong></div>
+                        <div class="sps-hidden-legacy"><span>Tunnel runtime</span><strong id="portalTunnelRuntime">--</strong></div>
+                    </div>
+                    <div class="portal-subscription-note" id="portalSubscriptionNote">Η κατάσταση συγχρονίζεται από το Smart Pro Portal.</div>
+                </div>
+                <button type="button" class="portal-disconnect-button" onclick="disconnectPortal()">Αποσύνδεση εγκατάστασης</button>
+            </div>
+            <div class="portal-link-message" id="portalConnectionMessage"></div>
+        </section>
+
+        <section class="sps-services" id="serviceOverview">
+            <div class="sps-section-heading">
+                <div><span class="sps-eyebrow">ΥΠΗΡΕΣΙΕΣ ΕΓΚΑΤΑΣΤΑΣΗΣ</span><h2>Κατάσταση Smart Pro</h2></div>
+                <p>Μία ματιά αρκεί για να δείτε τι είναι διαθέσιμο και τι πραγματικά λειτουργεί σε αυτή τη συσκευή.</p>
+            </div>
+            <div class="sps-service-list">
+                <article class="sps-service-row" data-service="managed-support">
+                    <div class="sps-service-icon">MS</div>
+                    <div class="sps-service-copy"><strong>Managed Support</strong><span>Μόνιμη υποδομή ασφαλούς τεχνικής υποστήριξης.</span></div>
+                    <div class="sps-service-status"><small>Δικαίωμα</small><b id="serviceManagedEntitlement">Έλεγχος...</b></div>
+                    <div class="sps-service-status"><small>Runtime</small><b id="serviceManagedRuntime">Έλεγχος...</b></div>
+                </article>
+                <article class="sps-service-row" data-service="tunnel">
+                    <div class="sps-service-icon">TU</div>
+                    <div class="sps-service-copy"><strong>Smart Pro Tunnel</strong><span>Ιδιωτικό outbound tunnel για τις υπηρεσίες ασφαλούς πρόσβασης.</span></div>
+                    <div class="sps-service-status wide"><small>Runtime</small><b id="serviceTunnelRuntime">Έλεγχος...</b></div>
+                </article>
+                <article class="sps-service-row" data-service="backup">
+                    <div class="sps-service-icon">BK</div>
+                    <div class="sps-service-copy"><strong>Managed Backup</strong><span>Κατάσταση πολιτικής, τοπικής ετοιμότητας και ασφαλούς αποθήκευσης.</span></div>
+                    <div class="sps-service-status wide"><small>Κατάσταση</small><b id="serviceBackupState">Έλεγχος...</b></div>
+                </article>
+                <article class="sps-service-row" data-service="external-url">
+                    <div class="sps-service-icon">URL</div>
+                    <div class="sps-service-copy"><strong>Managed External URL</strong><span>Ασφαλής εξωτερική πρόσβαση στη συγκεκριμένη εγκατάσταση.</span></div>
+                    <div class="sps-service-status wide"><small>Κατάσταση</small><b id="serviceExternalUrlState">Έλεγχος...</b><a id="serviceExternalUrlLink" class="sps-inline-link" href="#" target="_blank" style="display:none;">Άνοιγμα</a></div>
+                </article>
+            </div>
+            <div class="sps-services-note" id="servicesContextNote">Οι υπηρεσίες θα προσαρμοστούν αυτόματα όταν ολοκληρωθεί η σύνδεση με το Portal.</div>
+        </section>
+
+        <section class="sps-health">
+            <div class="sps-section-heading compact"><div><span class="sps-eyebrow">ΤΟΠΙΚΗ ΚΑΤΑΣΤΑΣΗ</span><h2>Home Assistant & Guardian</h2></div></div>
+            <div id="remoteBanner" class="remote-session-banner" style="display:none;">Τεχνικός συνδεδεμένος — πραγματοποιούνται εργασίες συντήρησης.</div>
+            <div class="scanner-container" id="scanner">
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="scanner-text" id="scannerText">Έναρξη διαγνωστικού ελέγχου...</div>
+            </div>
+            <div class="status" id="statusMessage">Γίνεται έλεγχος κατάστασης συστήματος...</div>
+            <div class="dashboard-grid" id="mainDashboard" style="display:none;">
+                <div class="info-panel">
+                    <h4>Πληροφορίες συστήματος</h4>
+                    <div class="stat-row"><span class="stat-label">Σύστημα</span><span class="stat-value" id="osValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Διεύθυνση IP</span><span class="stat-value" id="ipValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Επεξεργαστής</span><span class="stat-value" id="cpuValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Θερμοκρασία</span><span class="stat-value" id="cpuTempValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Μνήμη (RAM)</span><span class="stat-value" id="ramValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Σκληρός Δίσκος</span><span class="stat-value" id="diskValue">--</span></div>
+                    <div class="stat-row"><span class="stat-label">Βάση Δεδομένων</span><span class="stat-value" id="dbValue">--</span></div>
+                    <div class="stat-row sps-backup-row"><span class="stat-label">Τελευταία local backups</span><div class="stat-value" id="backupList"><span>--</span></div></div>
+                </div>
+                <div class="info-panel">
+                    <h4>Guardian</h4>
+                    <div class="health-row" id="watchdogStateRow"><span id="wdIcon">●</span> <span class="text" id="wdText">Guardian: Έλεγχος...</span></div>
+                    <div class="health-row" id="netHealth"><span>●</span> <span class="text">Internet: χωρίς ξεχωριστό probe</span></div>
+                    <div class="health-row" id="uptimeHealth"><span>●</span> <span class="text" id="uptimeText">Συνεχής λειτουργία</span></div>
+                    <div class="health-row" id="deviceHealth"><span>●</span> <span class="text" id="deviceHealthText">Έλεγχος...</span></div>
+                    <div class="health-row" id="batteryHealth"><span>●</span> <span class="text" id="batteryHealthText">Έλεγχος...</span></div>
+                    <div class="health-row" id="updateHealth"><span id="updateIcon">●</span> <span class="text" id="updateText">Έλεγχος...</span></div>
+                </div>
+            </div>
+        </section>
+
+        <details class="sps-activity" id="customerActivityPanel">
+            <summary><span>Πρόσφατη δραστηριότητα</span><small>Αιτήματα υποστήριξης και συντήρηση</small></summary>
+            <div class="logs-grid" id="logsGrid" style="display:none;">
+                <div class="history-section"><p class="history-title">Αιτήματα υποστήριξης</p><div class="history-list" id="reqHistoryList"></div></div>
+                <div class="history-section"><p class="history-title">Ημερολόγιο συντήρησης</p><div class="history-list" id="mainHistoryList"></div></div>
+            </div>
+        </details>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="supportModal">
+        <div class="modal-content">
+            <h3>Τι χρειάζεστε βοήθεια;</h3>
+            <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" value="Πρόβλημα Δικτύου"> 🌐 Πρόβλημα με το Internet</label>
+                <label class="checkbox-label"><input type="checkbox" value="Βλάβη Συσκευής"> 🔌 Συσκευή δεν ανταποκρίνεται</label>
+                <label class="checkbox-label"><input type="checkbox" value="Σφάλμα Αυτοματισμού"> 💡 Σφάλμα σε αυτοματισμό</label>
+                <label class="checkbox-label" id="lbl_plus1"><input type="checkbox" class="opt-plus" value="Προσθήκη Συσκευής"> <span id="txt_plus1">➕ Προσθήκη νέας συσκευής</span></label>
+                <label class="checkbox-label" id="lbl_plus2"><input type="checkbox" class="opt-plus" value="Αλλαγή Σεναρίου"> <span id="txt_plus2">⚙️ Αλλαγή σε υπάρχον σενάριο</span></label>
+                <label class="checkbox-label" id="lbl_pro1"><input type="checkbox" class="opt-pro" value="Νέο Σενάριο"> <span id="txt_pro1">🚀 Δημιουργία πολύπλοκου σεναρίου</span></label>
+                <label class="checkbox-label" id="lbl_pro2"><input type="checkbox" class="opt-pro" value="Live Συνεδρία"> <span id="txt_pro2">👨‍💻 Live Απομακρυσμένη Συνεδρία</span></label>
+            </div>
+            <textarea id="customIssueText" rows="2" placeholder="Γράψτε εδώ..." style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--box-bg); color: var(--text-color); margin-top: 10px; margin-bottom: 5px; box-sizing: border-box; resize: vertical; font-size: 13px;"></textarea>
+            <div class="modal-buttons">
+                <button class="modal-btn btn-cancel" onclick="closeModal()">Ακύρωση</button>
+                <button class="modal-btn btn-submit" id="supportSubmitButton" onclick="submitRequest()">Αποστολή</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="pinModal" style="z-index: 10000;">
+        <div class="modal-content" style="text-align: center; max-width: 300px;">
+            <h3 style="color: #e65100;">🔒 Περιοχή Τεχνικού</h3>
+            <input type="password" id="techPinInput" class="pin-input" maxlength="4" placeholder="••••" style="width: 100%; padding: 10px; box-sizing: border-box; text-align: center; letter-spacing: 5px; font-size: 20px;">
+            <div class="modal-buttons">
+                <button class="modal-btn btn-cancel" onclick="closePinModal()">Ακύρωση</button>
+                <button class="modal-btn btn-submit" style="background:#e65100;" onclick="verifyPin()">Είσοδος</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="customAlertModal" style="z-index: 2000;">
+        <div class="modal-content" style="text-align: center; max-width: 350px;">
+            <h3 style="color: #ff9800; border-bottom: none; margin-bottom: 5px;">🔒 Κλειδωμένη Υπηρεσία</h3>
+            <p style="font-size: 14px; margin-bottom: 20px; color: var(--text-muted); line-height: 1.5;">Αυτή η υπηρεσία δεν περιλαμβάνεται.<br>Μπορείτε να αναβαθμίσετε το πακέτο σας μέσω του Ψηφιακού Φακέλου Πελάτη!</p>
+            <button class="btn" style="background: #ff9800; width: 100%;" onclick="document.getElementById('customAlertModal').style.display='none'">Κατανοητό</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="watchdogTestConfirmModal" style="z-index: 20000;">
+        <div class="modal-content" style="text-align: left; max-width: 420px; background: #1e1e1e; color: white; border: 1px solid #2196f3;">
+            <h3 style="color: #64b5f6; border-bottom-color: #333;">🧪 Επιβεβαίωση ασφαλούς δοκιμής</h3>
+            <p style="font-size: 14px; line-height: 1.5; color: #ddd;">
+                Θα δημιουργηθεί μόνο εικονική offline οντότητα. Δεν θα αλλάξει πραγματική συσκευή, αυτοματισμός, δίκτυο ή Home Assistant.
+            </p>
+            <div id="watchdogTestConfirmDetails" style="white-space: pre-line; padding: 10px; border-radius: 6px; background: #292929; color: #eee; line-height: 1.6;"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn btn-cancel" type="button" onclick="closeWatchdogTestConfirm()">Ακύρωση</button>
+                <button class="modal-btn btn-submit" type="button" onclick="confirmWatchdogTestStart()">Έναρξη δοκιμής</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="emailTestResultModal" style="z-index: 21000;">
+        <div id="emailTestResultCard" class="modal-content" style="text-align: center; max-width: 420px; background: #1e1e1e; color: white; border: 1px solid #4caf50;">
+            <h3 id="emailTestResultTitle" style="border-bottom-color: #333;">Δοκιμή email</h3>
+            <p id="emailTestResultMessage" style="font-size: 14px; line-height: 1.6; color: #ddd; white-space: pre-line;"></p>
+            <button class="modal-btn btn-submit" type="button" onclick="closeEmailTestResult()" style="width: 100%;">Κατανοητό</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="automationConfirmModal" style="z-index: 22000;">
+        <div id="automationConfirmCard" class="modal-content automation-confirm-card">
+            <div class="automation-modal-kicker">SMART PRO AUTOMATION</div>
+            <h3 id="automationConfirmTitle">Επιβεβαίωση ενεργοποίησης</h3>
+            <p id="automationConfirmMessage" class="automation-modal-copy"></p>
+            <div id="automationConfirmMode" class="automation-confirm-mode"></div>
+            <ul id="automationConfirmChecklist" class="automation-confirm-list"></ul>
+            <div class="automation-confirm-note">
+                Η αλλαγή θα αποθηκευτεί μόνο όταν πατήσεις «Εφαρμογή» ή «Αποθήκευση» στον τεχνικό πίνακα.
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn btn-cancel" type="button" onclick="closeAutomationConfirm()">Ακύρωση</button>
+                <button id="automationConfirmButton" class="modal-btn automation-confirm-submit" type="button" onclick="confirmAutomationActivation()">Ενεργοποίηση</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="automationGuideModal" style="z-index: 22100;">
+        <div class="modal-content automation-guide-card">
+            <div class="automation-guide-header">
+                <div>
+                    <div class="automation-modal-kicker">ΟΔΗΓΟΣ ΤΕΧΝΙΚΟΥ</div>
+                    <h3 id="automationGuideTitle">Οδηγός λειτουργίας</h3>
+                </div>
+                <button class="automation-guide-close" type="button" onclick="closeAutomationGuide()" aria-label="Κλείσιμο οδηγού">×</button>
+            </div>
+            <div id="automationGuideBody" class="automation-guide-body"></div>
+            <button class="modal-btn btn-submit automation-guide-done" type="button" onclick="closeAutomationGuide()">Κατανοητό</button>
+        </div>
+    </div>
+
+    <!-- Modal Τεχνικού: σταθερό, ευρύχωρο layout -->
+    <div id="techModal" class="modal-overlay" style="z-index: 10000;">
+        <div class="modal-content tech-modal-shell">
+            <div class="tech-modal-header">
+                <h2>Κέντρο Ελέγχου Τεχνικού</h2>
+                <div class="tech-tabs" role="tablist" aria-label="Καρτέλες κέντρου ελέγχου">
+                    <button id="btn_tab_general" onclick="switchTab('tab_general')" class="tech-tab-btn is-active" type="button" role="tab" aria-selected="true">Γενικά</button>
+                    <button id="btn_tab_security" onclick="switchTab('tab_security')" class="tech-tab-btn" type="button" role="tab" aria-selected="false">Φρουρός</button>
+                    <button id="btn_tab_auto" onclick="switchTab('tab_auto')" class="tech-tab-btn" type="button" role="tab" aria-selected="false">Αυτοματισμοί</button>
+                </div>
+            </div>
+            <div class="tech-modal-body" id="techModalBody">
+
+            <!-- ΚΑΡΤΕΛΑ 1: ΓΕΝΙΚΑ -->
+            <div id="tab_general" class="tech-tab-content is-active">
+                <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; border: 1px solid #444;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px; color: #4caf50;">Στοιχεία & Συνδρομή Πελάτη</label>
+                    <div id="portalSubscriptionTechSummary" class="portal-subscription-tech-summary" style="display:none;"></div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size: 0.85em; color: #aaa; display: block; margin-bottom: 4px;">Installation ID</label>
+                        <input type="text" id="ts_customer_name" readonly aria-readonly="true" title="Συγχρονίζεται αυτόματα από το ενεργό pairing" style="width: 100%; padding: 8px; border-radius: 4px; background: #262626; color: #d7e8ff; border: 1px solid #455a64; margin-top: 3px; box-sizing: border-box; cursor: not-allowed;">
+                        <div style="font-size: 0.76em; color: #8fa3b8; margin-top: 5px; line-height: 1.35;">Συμπληρώνεται αυτόματα από το Portal και δεν αλλάζει χειροκίνητα.</div>
+                    </div>
+                    <div id="legacySubscriptionFields">
+                        <select id="planSelect" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; background: #333; color: #fff; border: 1px solid #555;">
+                            <option value="smartcare">Smart Care (Βασικό)</option>
+                            <option value="homeplus">Home Plus (Premium)</option>
+                            <option value="businesspro">Business Pro (VIP)</option>
+                        </select>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div><label style="font-size: 0.85em; color: #aaa;">Έναρξη</label><input type="date" id="ts_sub_start" style="width: 100%; padding: 5px; border-radius: 4px; background: #333; color: white; border: none; box-sizing: border-box;"></div>
+                            <div><label style="font-size: 0.85em; color: #aaa;">Μήνες</label><input type="number" id="ts_sub_months" value="12" style="width: 100%; padding: 5px; border-radius: 4px; background: #333; color: white; border: none; box-sizing: border-box;"></div>
+                        </div>
+                        <div style="font-size: 0.76em; color: #8fa3b8; margin-top: 7px; line-height: 1.35;">Οι τοπικές τιμές χρησιμοποιούνται μόνο όταν δεν υπάρχει ενεργό Portal pairing.</div>
+                    </div>
+                </div>
+                
+                <!-- ΝΕΑ ΕΝΟΤΗΤΑ: MESHCENTRAL & BANNER -->
+                <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; border: 1px solid #444;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 8px; color: #f44336;">🌐 Έλεγχος Απομακρυσμένης Πρόσβασης</label>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <input type="checkbox" id="remoteSessionToggle" style="transform: scale(1.2);">
+                        <label>Χειροκίνητη Ενεργοποίηση Banner</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; border-top: 1px dashed #555; padding-top: 10px;">
+                        <input type="checkbox" id="ts_mesh_banner_enabled" style="transform: scale(1.2);">
+                        <label style="color: #64b5f6; font-weight: bold;">Αυτόματο Banner (Μέσω MeshCentral)</label>
+                    </div>
+                    <input type="hidden" id="ts_mesh_server_ip" value="support.smart-pro-system.com">
+                </div>
+
+
+                <div style="margin-bottom: 15px; background: rgba(33,150,243,0.07); padding: 10px; border-radius: 5px; border: 1px solid #36566f;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 8px; color: #90caf9;">🩺 Κατάσταση διασυνδέσεων</label>
+                    <div id="integrationHealthPortal" style="padding: 7px 9px; margin-bottom: 6px; border-radius: 4px; background: #2b2b2b; color: #ccc;">Portal: Έλεγχος...</div>
+                    <div id="integrationHealthMesh" style="padding: 7px 9px; margin-bottom: 6px; border-radius: 4px; background: #2b2b2b; color: #ccc;">MeshCentral: Έλεγχος...</div>
+                    <div id="integrationHealthEmail" style="padding: 7px 9px; border-radius: 4px; background: #2b2b2b; color: #ccc;">Email ειδοποιήσεων: Έλεγχος...</div>
+                </div>
+
+                <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; border: 1px solid #444;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px; color: #ce93d8;">Ημερολόγιο Συντήρησης</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="maintenanceInput" placeholder="Προσθήκη σημείωσης..." style="flex: 1; padding: 8px; border-radius: 5px; background: #333; color: #fff; border: 1px solid #555;">
+                        <button onclick="addMaintenance()" style="padding: 8px 15px; border-radius: 5px; border: none; background: #ce93d8; color: #000; cursor: pointer; font-weight: bold;">Καταγραφή</button>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button onclick="window.open('/profile/security', '_blank')" style="flex: 1; padding: 10px; border-radius: 5px; border: none; background: #ff9800; color: white; cursor: pointer; font-weight: bold;">🔑 Token</button>
+                    <button onclick="resolveRequest()" style="flex: 2; padding: 10px; border-radius: 5px; border: none; background: #2e7d32; color: white; cursor: pointer; font-weight: bold;">📂 Διαχείριση αιτημάτων στο Portal</button>
+                </div>
+            </div>
+
+            <!-- ΚΑΡΤΕΛΑ 2: ΦΡΟΥΡΟΣ -->
+            <div id="tab_security" class="tech-tab-content">
+                <div style="margin-bottom: 15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border: 1px solid #4caf50; border-radius: 5px; display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="ts_watchdog_enabled" style="transform: scale(1.3);">
+                    <label style="font-weight: bold; font-size: 1.05em; color: #4caf50;">Ενεργοποίηση Φρουρού</label>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div><label style="font-size: 0.85em; color: #aaa;">Συχνότητα (Λεπτά)</label><input type="number" id="ts_check_interval" step="0.1" style="width: 100%; padding: 5px; border-radius: 4px; background: #333; color: white; border: none;"></div>
+                    <div><label style="font-size: 0.85em; color: #aaa;">Ανοχή (Λεπτά)</label><input type="number" id="ts_alert_delay" step="0.1" style="width: 100%; padding: 5px; border-radius: 4px; background: #333; color: white; border: none;"></div>
+                </div>
+                <div style="margin-bottom: 15px;"><label style="font-size: 0.85em; color: #aaa;">Όριο Συναγερμού Μπαταρίας (%)</label><input type="number" id="ts_battery_limit" step="1" style="width: 100%; padding: 5px; border-radius: 4px; background: #333; color: white; border: none;"></div>
+                <div style="margin-bottom: 15px; padding: 12px; background: rgba(255, 152, 0, 0.08); border: 1px solid #ff9800; border-radius: 6px;">
+                    <div style="font-weight: bold; color: #ffb74d; margin-bottom: 8px;">✉️ Email τεχνικών ειδοποιήσεων</div>
+                    <div style="font-size: 0.82em; color: #bbb; margin-bottom: 9px; line-height: 1.45;">
+                        Οι αυτοματοποιημένες ειδοποιήσεις αποστέλλονται από και προς
+                        <strong id="ts_alert_email_address" style="color: #fff;">alert@smart-pro-system.gr</strong>.
+                    </div>
+                    <label style="font-size: 0.85em; color: #aaa; display: block; margin-bottom: 4px;">Κωδικός Email Ειδοποιήσεων</label>
+                    <input type="password" id="ts_email_password" autocomplete="new-password" style="width: 100%; padding: 7px; border-radius: 4px; background: #333; color: white; border: 1px solid #555; box-sizing: border-box; margin-bottom: 9px;">
+                    <button id="testAlertEmailBtn" type="button" onclick="sendTestAlertEmail()" style="padding: 8px 12px; border-radius: 5px; border: none; background: #ef6c00; color: white; cursor: pointer; font-weight: bold;">✉️ Αποστολή δοκιμαστικού email</button>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Φίλτρα</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.9em; background: #2a2a2a; padding: 10px; border-radius: 5px;">
+                        <label><input type="checkbox" id="ts_domain_light"> Φώτα</label> <label><input type="checkbox" id="ts_domain_switch"> Πρίζες</label>
+                        <label><input type="checkbox" id="ts_domain_binary_sensor"> Αισθητήρες</label> <label><input type="checkbox" id="ts_domain_climate"> Θερμοστάτες</label>
+                        <label><input type="checkbox" id="ts_domain_cover"> Ρολά</label> <label><input type="checkbox" id="ts_domain_camera"> Κάμερες</label>
+                        <label><input type="checkbox" id="ts_domain_lock"> Κλειδαριές</label> <label><input type="checkbox" id="ts_domain_water_heater"> Boiler</label>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px; padding: 12px; background: rgba(33, 150, 243, 0.10); border: 1px solid #2196f3; border-radius: 6px;">
+                    <div style="font-weight: bold; color: #64b5f6; margin-bottom: 6px;">🧪 Ασφαλής δοκιμή Φρουρού</div>
+                    <p style="font-size: 0.82em; color: #bbb; margin: 0 0 12px; line-height: 1.4;">
+                        Δημιουργεί μόνο μία εικονική offline συσκευή. Δεν αλλάζει πραγματικές συσκευές, αυτοματισμούς, δίκτυο ή Home Assistant.
+                    </p>
+                    <div style="margin-bottom: 10px;">
+                        <label style="font-size: 0.85em; color: #aaa;">Όνομα εικονικής συσκευής</label>
+                        <input type="text" id="ts_watchdog_test_device_name" maxlength="80" style="width: 100%; padding: 6px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <label style="font-size: 0.85em; color: #aaa;">Καθυστέρηση αιτήματος (δευτ.)</label>
+                            <input type="number" id="ts_watchdog_test_delay" min="3" max="300" step="1" style="width: 100%; padding: 6px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.85em; color: #aaa;">Αυτόματος καθαρισμός μετά (δευτ.)</label>
+                            <input type="number" id="ts_watchdog_test_clear" min="5" max="600" step="1" style="width: 100%; padding: 6px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
+                        </div>
+                    </div>
+                    <label style="display: block; font-size: 0.88em; margin-bottom: 12px;">
+                        <input type="checkbox" id="ts_watchdog_test_send_email"> Αποστολή δοκιμαστικού email
+                    </label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button id="watchdogTestStartBtn" type="button" onclick="startWatchdogTest()" style="padding: 9px 14px; border-radius: 5px; border: none; background: #1976d2; color: white; cursor: pointer; font-weight: bold;">🧪 Έναρξη ασφαλούς δοκιμής</button>
+                        <button id="watchdogTestCancelBtn" type="button" onclick="cancelWatchdogTest()" disabled style="padding: 9px 14px; border-radius: 5px; border: 1px solid #777; background: #333; color: white; cursor: pointer; font-weight: bold;">Ακύρωση δοκιμής</button>
+                    </div>
+                    <div id="watchdogTestStatus" style="margin-top: 10px; padding: 8px; border-radius: 4px; background: #252525; color: #ddd; font-size: 0.85em;">Δεν εκτελείται δοκιμή.</div>
+                </div>
+            </div>
+
+            <!-- ΚΑΡΤΕΛΑ 3: ΑΥΤΟΜΑΤΙΣΜΟΙ -->
+            <div id="tab_auto" class="tech-tab-content">
+                <div class="automation-workspace-intro">
+                    <div>
+                        <div class="automation-workspace-eyebrow">SMART PRO AUTOMATIONS</div>
+                        <strong>Κέντρο αυτοματισμών</strong>
+                        <p>Κοινή επαγγελματική δομή για τους σημερινούς και μελλοντικούς αυτοματισμούς.</p>
+                    </div>
+                    <div class="automation-legend" aria-label="Χρωματικές ενδείξεις">
+                        <span><i class="legend-dot legend-active"></i>Ενεργό</span>
+                        <span><i class="legend-dot legend-info"></i>Πληροφορία</span>
+                        <span><i class="legend-dot legend-warning"></i>Προειδοποίηση</span>
+                        <span><i class="legend-dot legend-critical"></i>Κρίσιμο</span>
+                    </div>
+                </div>
+
+                <div class="automation-grid">
+                    <section class="auto-card automation-card open" id="cardUpdates" data-automation-state="inactive">
+                        <div class="automation-card-header">
+                            <button class="automation-card-main" type="button" onclick="toggleCard('cardUpdates')" aria-expanded="true">
+                                <span class="automation-card-icon">↻</span>
+                                <span class="automation-card-heading">
+                                    <span class="automation-card-eyebrow">AUTOMATION CARD <b>PRO</b></span>
+                                    <span class="automation-card-title">Smart Updates &amp; Rollback</span>
+                                    <span id="updatesCardSummary" class="automation-card-summary">Ανενεργό · Αναμονή 3 ημερών · Rollback στις 2 συσκευές</span>
+                                </span>
+                                <span class="automation-chevron" aria-hidden="true">⌄</span>
+                            </button>
+                            <div class="automation-card-actions">
+                                <button class="automation-guide-button" type="button" onclick="openAutomationGuide('updates')">? Οδηγός</button>
+                                <span id="updatesStatusPill" class="automation-status-pill" data-status="inactive">Ανενεργό</span>
+                                <label class="sp-switch sp-switch-master" title="Κεντρικός διακόπτης Smart Updates">
+                                    <input type="checkbox" id="ts_auto_update_enabled" onchange="handleAutoUpdateToggle(event)">
+                                    <span class="sp-switch-track"><span class="sp-switch-thumb"></span></span>
+                                    <span id="updatesToggleLabel" class="sp-switch-label">Ανενεργό</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="auto-card-content automation-card-content">
+                            <div id="updatesStateNarrative" class="automation-state-banner" data-status="inactive">
+                                Ο αυτοματισμός είναι κλειστός. Δεν γίνεται έλεγχος, ειδοποίηση, backup, εγκατάσταση ή rollback.
+                            </div>
+
+                            <details class="automation-section" open>
+                                <summary>
+                                    <span><b>01</b> Πολιτική ενημερώσεων</span>
+                                    <small>Τι παρακολουθείται και με ποιον τρόπο</small>
+                                </summary>
+                                <div class="automation-section-body">
+                                    <div class="automation-option-grid">
+                                        <label class="automation-option">
+                                            <input type="checkbox" id="upd_core" onchange="updateAutomationPresentation()">
+                                            <span class="automation-option-check">✓</span>
+                                            <span><strong>Home Assistant Core</strong><small>Κύρια έκδοση Home Assistant</small></span>
+                                        </label>
+                                        <label class="automation-option">
+                                            <input type="checkbox" id="upd_os" onchange="updateAutomationPresentation()">
+                                            <span class="automation-option-check">✓</span>
+                                            <span><strong>OS &amp; Supervisor</strong><small>Λειτουργικό και Supervisor</small></span>
+                                        </label>
+                                        <label class="automation-option">
+                                            <input type="checkbox" id="upd_addons" onchange="updateAutomationPresentation()">
+                                            <span class="automation-option-check">✓</span>
+                                            <span><strong>Πρόσθετα</strong><small>Εγκατεστημένα add-ons</small></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="automation-section" open>
+                                <summary>
+                                    <span><b>02</b> Χρονοδιακόπτες ασφαλείας</span>
+                                    <small>Ωρίμανση, backup και αξιολόγηση</small>
+                                </summary>
+                                <div class="automation-section-body automation-field-grid three-columns">
+                                    <label class="automation-field">
+                                        <span class="automation-field-label">Ημέρες ωρίμανσης <i class="field-help" tabindex="0" data-tooltip="Πόσες ημέρες περιμένει μια διαθέσιμη ενημέρωση πριν θεωρηθεί ώριμη.">?</i></span>
+                                        <input type="number" id="upd_wait_days" value="3" min="0" step="1" oninput="updateAutomationPresentation()">
+                                        <small>Προτεινόμενο: 3 ημέρες</small>
+                                    </label>
+                                    <label class="automation-field">
+                                        <span class="automation-field-label">Αναμονή backup <i class="field-help" tabindex="0" data-tooltip="Χρόνος που δίνεται στο Home Assistant για να ολοκληρώσει το backup πριν συνεχίσει η ροή.">?</i></span>
+                                        <input type="number" id="upd_backup_wait" value="15" min="1" step="1" oninput="updateAutomationPresentation()">
+                                        <small>Σε λεπτά</small>
+                                    </label>
+                                    <label class="automation-field">
+                                        <span class="automation-field-label">Χρόνος αξιολόγησης <i class="field-help" tabindex="0" data-tooltip="Χρόνος αναμονής μετά την εγκατάσταση πριν γίνει ο έλεγχος υγείας.">?</i></span>
+                                        <input type="number" id="upd_eval_wait" value="20" min="1" step="1" oninput="updateAutomationPresentation()">
+                                        <small>Σε λεπτά</small>
+                                    </label>
+                                </div>
+                            </details>
+
+                            <details class="automation-section" open>
+                                <summary>
+                                    <span><b>03</b> Ασφάλεια, rollback &amp; ειδοποιήσεις</span>
+                                    <small>Όρια και επίπεδο επέμβασης</small>
+                                </summary>
+                                <div class="automation-section-body automation-safety-grid">
+                                    <label class="automation-field">
+                                        <span class="automation-field-label">Όριο νέων offline συσκευών <i class="field-help" tabindex="0" data-tooltip="Αν μετά το update εμφανιστούν τόσες ή περισσότερες νέες offline συσκευές, ξεκινά rollback.">?</i></span>
+                                        <input type="number" id="upd_offline_limit" value="2" min="1" step="1" oninput="updateAutomationPresentation()">
+                                        <small>Rollback όταν το αποτέλεσμα είναι ≥ του ορίου</small>
+                                    </label>
+                                    <div class="automation-setting-row">
+                                        <div>
+                                            <strong>Μόνο ειδοποίηση</strong>
+                                            <small>Παρακολούθηση χωρίς backup, εγκατάσταση ή rollback.</small>
+                                        </div>
+                                        <label class="sp-switch" title="Λειτουργία μόνο ειδοποίησης">
+                                            <input type="checkbox" id="upd_notify_all" onchange="handleNotifyOnlyToggle()">
+                                            <span class="sp-switch-track"><span class="sp-switch-thumb"></span></span>
+                                            <span id="updatesNotifyLabel" class="sp-switch-label">Ανενεργό</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="automation-section automation-test-section" id="updatesSafeTestDetails">
+                                <summary>
+                                    <span><b>04</b> Ασφαλής δοκιμή Smart Updates</span>
+                                    <small>Προσομοίωση χωρίς πραγματικές ενέργειες</small>
+                                </summary>
+                                <div class="automation-section-body">
+                                    <p class="smart-updates-test-help">
+                                        Ελέγχει άμεσα τη λογική με εικονικό update. Ο κεντρικός διακόπτης πρέπει να παραμένει κλειστός.
+                                    </p>
+                                    <div class="smart-updates-test-controls">
+                                        <select id="smartUpdatesTestScenario" aria-label="Σενάριο ασφαλούς δοκιμής">
+                                            <option value="notify_only">Μόνο ειδοποίηση</option>
+                                            <option value="success">Επιτυχής ενημέρωση</option>
+                                            <option value="backup_failure">Αποτυχία backup</option>
+                                            <option value="update_failure">Αποτυχία εγκατάστασης</option>
+                                            <option value="rollback_success">Πρόβλημα υγείας → επιτυχές rollback</option>
+                                            <option value="rollback_failure">Πρόβλημα υγείας → αποτυχία rollback</option>
+                                        </select>
+                                        <button id="smartUpdatesTestRunBtn" type="button" onclick="runSmartUpdatesSafeTest()">▶ Εκτέλεση ασφαλούς δοκιμής</button>
+                                    </div>
+                                    <div id="smartUpdatesTestSafety" class="smart-updates-test-safety">Πραγματικές ενέργειες: μπλοκαρισμένες.</div>
+                                    <div id="smartUpdatesTestStatus" class="smart-updates-test-status" data-status="idle">Δεν έχει εκτελεστεί ασφαλής δοκιμή.</div>
+                                    <div id="smartUpdatesTestSteps" class="smart-updates-test-steps"></div>
+                                </div>
+                            </details>
+                        </div>
+                    </section>
+
+                    <section class="auto-card automation-card" id="cardVacation" data-automation-state="active">
+                        <div class="automation-card-header">
+                            <button class="automation-card-main" type="button" onclick="toggleCard('cardVacation')" aria-expanded="false">
+                                <span class="automation-card-icon">⌂</span>
+                                <span class="automation-card-heading">
+                                    <span class="automation-card-eyebrow">AUTOMATION CARD <b>SMART</b></span>
+                                    <span class="automation-card-title">Smart Vacation Mode</span>
+                                    <span id="vacationCardSummary" class="automation-card-summary">Προσομοίωση παρουσίας · 20:00–23:59</span>
+                                </span>
+                                <span class="automation-chevron" aria-hidden="true">⌄</span>
+                            </button>
+                            <div class="automation-card-actions">
+                                <button class="automation-guide-button" type="button" onclick="openAutomationGuide('vacation')">? Οδηγός</button>
+                                <span id="vacationStatusPill" class="automation-status-pill" data-status="active">Ενεργό</span>
+                                <label class="sp-switch sp-switch-master" title="Κεντρικός διακόπτης Vacation Mode">
+                                    <input type="checkbox" id="ts_auto_vacation_enabled" onchange="updateAutomationPresentation()">
+                                    <span class="sp-switch-track"><span class="sp-switch-thumb"></span></span>
+                                    <span id="vacationToggleLabel" class="sp-switch-label">Ενεργό</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="auto-card-content automation-card-content">
+                            <div id="vacationStateNarrative" class="automation-state-banner" data-status="active">
+                                Ο αυτοματισμός εκτελείται μόνο όταν το input_boolean.smart_pro_vacation είναι ενεργό στο Home Assistant.
+                            </div>
+
+                            <details class="automation-section" open>
+                                <summary>
+                                    <span><b>01</b> Πρόγραμμα παρουσίας</span>
+                                    <small>Ώρες φωτισμού και ρολών</small>
+                                </summary>
+                                <div class="automation-section-body">
+                                    <div class="automation-subsection-title">Φωτισμός και ήχος — τυχαία παρουσία</div>
+                                    <div class="automation-field-grid two-columns">
+                                        <label class="automation-field"><span class="automation-field-label">Έναρξη</span><input type="time" id="ts_vacation_start" oninput="updateAutomationPresentation()"></label>
+                                        <label class="automation-field"><span class="automation-field-label">Λήξη</span><input type="time" id="ts_vacation_end" oninput="updateAutomationPresentation()"></label>
+                                    </div>
+                                    <div class="automation-subsection-title automation-subsection-spaced">Ρολά / παντζούρια — σταθερό ωράριο</div>
+                                    <div class="automation-field-grid two-columns">
+                                        <label class="automation-field"><span class="automation-field-label">Άνοιγμα</span><input type="time" id="ts_cover_open" oninput="updateAutomationPresentation()"></label>
+                                        <label class="automation-field"><span class="automation-field-label">Κλείσιμο</span><input type="time" id="ts_cover_close" oninput="updateAutomationPresentation()"></label>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="automation-section">
+                                <summary>
+                                    <span><b>02</b> Συσκευές προσομοίωσης</span>
+                                    <small id="vacationDeviceSummary">Δεν έχουν φορτωθεί ακόμη</small>
+                                </summary>
+                                <div class="automation-section-body automation-device-groups">
+                                    <div class="automation-device-group">
+                                        <div class="automation-device-title"><span>💡 Φωτισμός / πρίζες</span><small>Τυχαία ενεργοποίηση</small></div>
+                                        <div class="cat-list automation-device-list" id="vacationLightsContainer">Φόρτωση...</div>
+                                    </div>
+                                    <div class="automation-device-group">
+                                        <div class="automation-device-title"><span>▤ Ρολά / παντζούρια</span><small>Βάσει ωραρίου</small></div>
+                                        <div class="cat-list automation-device-list" id="vacationCoversContainer">Φόρτωση...</div>
+                                    </div>
+                                    <div class="automation-device-group">
+                                        <div class="automation-device-title"><span>♪ Ήχος / TV</span><small>Τυχαία παρουσία</small></div>
+                                        <div class="cat-list automation-device-list" id="vacationAudioContainer">Φόρτωση...</div>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </section>
+                </div>
+            </div>
+            
+            </div>
+            <div class="tech-modal-footer">
+                <button onclick="closeTechModal()" class="tech-footer-btn tech-footer-cancel" type="button">Ακύρωση</button>
+                <button id="techApplyBtn" onclick="saveTechSettings(false)" class="tech-footer-btn tech-footer-apply" type="button">Εφαρμογή</button>
+                <button id="techSaveBtn" onclick="saveTechSettings(true)" class="tech-footer-btn tech-footer-save" type="button">Αποθήκευση</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ΑΠΟΛΥΤΟ ΚΛΕΙΔΩΜΑ (LOCKOUT SCREEN) -->
+    <div class="lockout-overlay" id="lockoutScreen">
+        <div class="lockout-box">
+            <h2 onclick="checkTechAccess()" style="cursor: pointer; user-select: none;">⚠️ Η Συνδρομή Έληξε</h2>
+            <p>Η πρόσβαση στο Κέντρο Υποστήριξης έχει ανασταλεί.</p>
+            <a href="https://smart-pro-system.gr" target="_blank" class="btn-renew">Ανανέωση μέσω Ψηφιακού Φακέλου</a>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Μήνυμα</div>
+    <script src="script.js?v=3000"></script>
+</body>
+</html>

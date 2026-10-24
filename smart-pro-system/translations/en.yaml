@@ -1,0 +1,23 @@
+configuration:
+  ha_token:
+    name: "Home Assistant Token"
+    description: "Κρυφό Long-Lived Access Token για τους τοπικούς ελέγχους του Smart Pro System."
+  mesh_access_token:
+    name: "MeshCentral Access Token"
+    description: "Κρυφό token για τον ασφαλή έλεγχο κατάστασης απομακρυσμένης συνεδρίας."
+  portal_url:
+    name: "Smart Pro Portal URL"
+    description: "Production διεύθυνση του Smart Pro Portal."
+  portal_basic_username:
+    name: "Portal Basic Auth Username"
+    description: "Όνομα χρήστη του εξωτερικού κλειδώματος του site, όταν είναι ενεργό."
+  portal_basic_password:
+    name: "Portal Basic Auth Password"
+    description: "Κωδικός του εξωτερικού κλειδώματος του site, όταν είναι ενεργό."
+
+  managed_backup_s3_access_key:
+    name: "Managed Backup S3 Access Key"
+    description: "OVHcloud S3 Access Key για το primary Managed Backup target. Αποθηκεύεται μόνο τοπικά στο add-on."
+  managed_backup_s3_secret_key:
+    name: "Managed Backup S3 Secret Key"
+    description: "OVHcloud S3 Secret Key για το primary Managed Backup target. Αποθηκεύεται μόνο τοπικά στο add-on και δεν αποστέλλεται στο Portal."

@@ -1,0 +1,16 @@
+configuration:
+  enabled:
+    name: Enable private tunnel canary
+    description: Starts the outbound Smart Pro private tunnel. Leave disabled until the gateway peer is registered.
+  gateway_endpoint:
+    name: External Gateway endpoint
+    description: IPv4 or DNS host plus UDP port, for example gateway.example.com:51820.
+  gateway_public_key:
+    name: External Gateway WireGuard public key
+    description: Public WireGuard key of the Smart Pro External Gateway.
+  peer_address:
+    name: Peer tunnel address
+    description: Installation-specific /32 inside 10.203.0.0/16. The 10.203.0.0/24 range is reserved.
+  private_proxy_enabled:
+    name: Enable private Home Assistant proxy canary
+    description: Starts a tunnel-only TCP proxy to Home Assistant after the private tunnel and target probe are ready. No public URL is published.

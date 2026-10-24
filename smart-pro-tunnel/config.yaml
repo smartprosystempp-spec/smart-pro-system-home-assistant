@@ -1,0 +1,42 @@
+name: "Smart Pro Tunnel"
+description: "Isolated outbound private tunnel runtime for Smart Pro Managed External URL."
+version: "0.1.6"
+slug: "smart_pro_tunnel"
+init: false
+startup: application
+boot: manual
+stage: experimental
+
+arch:
+  - aarch64
+  - amd64
+
+privileged:
+  - NET_ADMIN
+
+devices:
+  - /dev/net/tun
+
+map:
+  - type: share
+    read_only: false
+
+options:
+  enabled: false
+  gateway_endpoint: ""
+  gateway_public_key: ""
+  peer_address: "10.203.1.1/32"
+  private_proxy_enabled: false
+  home_assistant_target_host: "172.30.32.1"
+  home_assistant_target_port: 8123
+  home_assistant_target_ssl: false
+
+schema:
+  enabled: bool
+  gateway_endpoint: str
+  gateway_public_key: str
+  peer_address: str
+  private_proxy_enabled: bool
+  home_assistant_target_host: str
+  home_assistant_target_port: int
+  home_assistant_target_ssl: bool
