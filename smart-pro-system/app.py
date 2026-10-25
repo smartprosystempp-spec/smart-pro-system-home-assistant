@@ -647,7 +647,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.9'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.10'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -4483,7 +4483,7 @@ def _supervisor_api_json(path, method='GET', data=None, timeout=10):
     path = '/' + str(path or '').lstrip('/')
     slug_re = r'[a-z0-9_]{1,128}'
     allowed = False
-    if method == 'GET' and path in ('/supervisor/info', '/addons', '/core/info', '/backups/info', '/store/addons'):
+    if method == 'GET' and path in ('/supervisor/info', '/addons', '/core/info', '/backups/info', '/store', '/store/addons'):
         allowed = True
     elif method == 'GET' and re.fullmatch(rf'/addons/{slug_re}/info', path):
         allowed = True
@@ -4634,29 +4634,48 @@ def _smart_pro_tunnel_installed_match():
     return (matches[0] if matches else None), ''
 
 
+def _smart_pro_tunnel_repository_source(value):
+    source = str(value or '').strip().rstrip('/').lower()
+    if source.endswith('.git'):
+        source = source[:-4]
+    return source
+
+
 def _smart_pro_tunnel_store_match():
-    store, error = _supervisor_api_json('/store/addons', 'GET', timeout=20)
+    # Supervisor store app records expose ``repository`` as the repository slug,
+    # not the repository source URL. Read the combined store payload so the app
+    # slug can be joined to the repository metadata and verified against the
+    # official tokenless Smart Pro repository source before any install mutation.
+    store, error = _supervisor_api_json('/store', 'GET', timeout=20)
     if error:
-        return None, 'store_addons_' + error
-    if isinstance(store, dict):
-        items = store.get('addons') if isinstance(store.get('addons'), list) else []
-    elif isinstance(store, list):
-        items = store
-    else:
-        return None, 'store_addons_invalid'
-    expected_repository = SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL.rstrip('/').lower()
+        return None, 'store_' + error
+    if not isinstance(store, dict):
+        return None, 'store_invalid'
+
+    items = store.get('addons') if isinstance(store.get('addons'), list) else []
+    repositories = store.get('repositories') if isinstance(store.get('repositories'), list) else []
+    repository_sources = {}
+    for repository_item in repositories:
+        if not isinstance(repository_item, dict):
+            continue
+        repository_slug = str(repository_item.get('slug', '') or '').strip().lower()
+        source = _smart_pro_tunnel_repository_source(repository_item.get('source'))
+        if repository_slug and source:
+            repository_sources[repository_slug] = source
+
+    expected_repository = _smart_pro_tunnel_repository_source(SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL)
     matches = []
     for item in items:
         if not isinstance(item, dict):
             continue
         slug = str(item.get('slug', '') or '').strip().lower()
         name = str(item.get('name', '') or '').strip()
-        repository = str(item.get('repository', '') or '').strip().rstrip('/').lower()
+        repository_slug = str(item.get('repository', '') or '').strip().lower()
         if name != 'Smart Pro Tunnel':
             continue
         if not (slug == 'smart_pro_tunnel' or slug.endswith('_smart_pro_tunnel')):
             continue
-        if repository != expected_repository:
+        if not repository_slug or repository_sources.get(repository_slug) != expected_repository:
             continue
         if _smart_pro_tunnel_version_tuple(item.get('version_latest') or item.get('version')) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
             continue

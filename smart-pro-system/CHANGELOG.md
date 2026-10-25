@@ -1,3 +1,9 @@
+## 3.0.10 — Tunnel Store Repository Contract Fix
+
+- Διορθώνει το replacement Tunnel Store discovery ώστε το app `repository` να αντιμετωπίζεται ως Supervisor repository slug, όχι ως URL.
+- Επαληθεύει fail-closed το repository slug μέσω του Store `repositories[].source` απέναντι στο επίσημο tokenless Smart Pro GitHub repository πριν από οποιοδήποτε install.
+- Διατηρεί το 3.0.9 `version_latest` fix και όλο το υπάρχον signed Control Plane / zero-copy provisioning αμετάβλητο.
+
 ## 3.0.9 — Tunnel Store Discovery Version Contract Fix
 
 - Fixes replacement Tunnel recovery discovery for uninstalled Store apps.
