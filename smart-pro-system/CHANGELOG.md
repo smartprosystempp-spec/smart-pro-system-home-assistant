@@ -1,3 +1,10 @@
+## 3.0.11 — Tunnel Store Live Contract Diagnostic
+
+- Adds one bounded read-only `/api/tunnel_store_diagnostic` endpoint for replacement QA.
+- Exposes only sanitized Store candidate/repository/version/stage/availability metadata needed to isolate `store_match_missing`; no Supervisor token, app options, credentials or key material are exposed.
+- Temporarily pauses automatic Tunnel companion recovery in this diagnostic build so no install/start mutation can occur while inspecting the live Store contract.
+- Keeps Portal, subscription, Guardian, Tunnel 0.1.7, Managed Support and signed Control Plane logic unchanged.
+
 ## 3.0.10 — Tunnel Store Repository Contract Fix
 
 - Διορθώνει το replacement Tunnel Store discovery ώστε το app `repository` να αντιμετωπίζεται ως Supervisor repository slug, όχι ως URL.
