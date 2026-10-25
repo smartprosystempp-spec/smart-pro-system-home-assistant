@@ -1,3 +1,10 @@
+## 3.0.6 — External URL Persisted State Idempotency Fix
+
+- Makes the Managed External URL Portal-state normalizer idempotent across raw heartbeat and already-normalized persisted shapes.
+- Preserves standalone status/cycle/dates, package eligibility, publication status, PUBLIC READY and hostname when `external_access_portal` is read back for `/api/portal_status`.
+- Fixes the 3.0.5 double-normalization regression where top-level eligibility survived but standalone/publication detail fell back to `not_configured` / `unknown`.
+- Does not change Portal contracts, Trial/package semantics, Tunnel/runtime authority, provisioning, DNS, pairing, credentials or database schema.
+
 ## 3.0.5 — External URL Customer Heartbeat Compatibility Bridge
 
 - Consumes the Portal 3.6.294 customer-safe `external_access_customer` heartbeat bridge as authoritative presentation state.

@@ -441,9 +441,14 @@ def _normalize_external_access_portal_state(external):
     if source not in {'none', 'package', 'standalone', 'package_and_standalone'}:
         source = 'none'
 
+    # Accept both raw Portal schemas and the already-normalized state persisted
+    # in portal_connection.json. This makes the normalizer idempotent and avoids
+    # losing standalone/publication detail on the customer-summary read path.
+    persisted_standalone = external.get('standalone') if isinstance(external.get('standalone'), dict) else {}
     raw_standalone = entitlement.get('standalone') if isinstance(entitlement.get('standalone'), dict) else {}
     customer_standalone = customer.get('standalone') if isinstance(customer.get('standalone'), dict) else {}
-    standalone = dict(customer_standalone)
+    standalone = dict(persisted_standalone)
+    standalone.update(customer_standalone)
     standalone.update(raw_standalone)
     standalone_status = str(standalone.get('status', 'not_configured') or 'not_configured').strip().lower()
     if standalone_status not in {'not_configured', 'pending', 'active', 'grace', 'expired', 'suspended', 'revoked'}:
@@ -452,7 +457,8 @@ def _normalize_external_access_portal_state(external):
     if cycle not in {'', 'monthly', 'annual'}:
         cycle = ''
 
-    publication = customer.get('publication') if isinstance(customer.get('publication'), dict) else {}
+    persisted_publication = external.get('publication') if isinstance(external.get('publication'), dict) else {}
+    publication = customer.get('publication') if isinstance(customer.get('publication'), dict) else persisted_publication
     publication_status = str(publication.get('status', 'unknown') or 'unknown').strip().lower()
     allowed_publication_states = {
         'unknown', 'awaiting_gateway_observation', 'inactive_no_observation',
@@ -468,7 +474,7 @@ def _normalize_external_access_portal_state(external):
     public_ready = bool(publication.get('public_ready', False)) and publication_status == 'active_in_sync' and bool(hostname)
 
     customer_eligible = bool(customer.get('entitlement_eligible', False))
-    package_eligible = bool(entitlement.get('package_eligible', customer.get('package_eligible', False)))
+    package_eligible = bool(entitlement.get('package_eligible', customer.get('package_eligible', external.get('package_eligible', False))))
     standalone_eligible = bool(standalone.get('eligible', False))
     eligible = bool(external.get('eligible', False)) or bool(entitlement.get('eligible', False)) or customer_eligible or package_eligible or standalone_eligible
 
@@ -627,7 +633,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.5'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.6'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
