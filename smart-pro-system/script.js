@@ -482,14 +482,15 @@ function renderVNextOverview(status) {
     const registryState = String(external.registry_state || '');
     const tunnelState = String(external.tunnel_runtime || 'off');
     const gatewayState = String(external.gateway_state || 'not_configured');
-    if (registryState === 'active' && external.hostname) { externalLabel = 'Online · Public URL ενεργό'; externalTone = 'good'; }
+    const portalPublicReady = external.portal_public_ready === true;
+    if ((portalPublicReady || registryState === 'active') && external.hostname) { externalLabel = 'Online · Public URL ενεργό'; externalTone = 'good'; }
     else if (registryState && registryState !== 'unknown') { externalLabel = 'Provisioning · ' + registryState.replaceAll('_', ' '); externalTone = 'attention'; }
     else if (tunnelState === 'connected' && gatewayState === 'private_ready') { externalLabel = 'Private tunnel έτοιμο · αναμονή public URL'; externalTone = 'attention'; }
     else if (['starting','up_no_handshake','handshake_stale'].includes(tunnelState)) { externalLabel = 'Tunnel σε ρύθμιση · αναμονή provisioning'; externalTone = 'attention'; }
     else if (external.entitlement_eligible === true) { externalLabel = 'Αγορασμένο · αναμονή provisioning'; externalTone = 'attention'; }
     spsSetText('serviceExternalUrlState', externalLabel, externalTone);
     if (externalLink) {
-        if (registryState === 'active' && external.hostname) {
+        if ((portalPublicReady || registryState === 'active') && external.hostname) {
             externalLink.href = 'https://' + external.hostname;
             externalLink.style.display = 'inline-flex';
         } else {

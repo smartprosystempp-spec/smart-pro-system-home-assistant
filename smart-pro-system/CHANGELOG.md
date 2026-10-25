@@ -1,3 +1,11 @@
+## 3.0.4 — External URL Heartbeat Synchronization Hotfix
+
+- Consumes and persists durable Portal-owned standalone entitlement/publication presentation state.
+- Displays `PUBLIC READY` and the public URL independently from the short-lived Gateway observation freshness window.
+- Adds pairing-time External URL state persistence; existing heartbeat persistence remains intact.
+- Keeps provisioning/runtime authority exclusively on the signed Control Plane and exposes no new secrets.
+- Preserves the 3.0.3 Trial/standalone semantics and real Tunnel runtime presentation.
+
 ## 3.0.3 — Standalone / Trial Semantics & Runtime Truth
 
 - Διορθώνει το customer mode ώστε Trial, paid subscription και standalone υπηρεσία να είναι διαφορετικές έννοιες.

@@ -413,7 +413,7 @@ def external_access_agent_heartbeat_snapshot():
 
 
 def _normalize_external_access_portal_state(external):
-    """Minimize Portal-owned External URL entitlement state for presentation only."""
+    """Minimize Portal-owned External URL state for read-only customer presentation."""
     default = {
         'eligible': False,
         'eligibility_source': 'none',
@@ -425,30 +425,68 @@ def _normalize_external_access_portal_state(external):
             'ends_at': 0,
             'cycle': '',
         },
+        'publication': {
+            'status': 'unknown',
+            'public_ready': False,
+            'hostname': '',
+        },
     }
     if not isinstance(external, dict):
         return default
+
     entitlement = external.get('entitlement') if isinstance(external.get('entitlement'), dict) else {}
-    source = str(entitlement.get('eligibility_source', 'none') or 'none').strip().lower()
+    customer = external.get('customer_state') if isinstance(external.get('customer_state'), dict) else {}
+
+    source = str(entitlement.get('eligibility_source', customer.get('eligibility_source', 'none')) or 'none').strip().lower()
     if source not in {'none', 'package', 'standalone', 'package_and_standalone'}:
         source = 'none'
-    standalone = entitlement.get('standalone') if isinstance(entitlement.get('standalone'), dict) else {}
+
+    raw_standalone = entitlement.get('standalone') if isinstance(entitlement.get('standalone'), dict) else {}
+    customer_standalone = customer.get('standalone') if isinstance(customer.get('standalone'), dict) else {}
+    standalone = dict(customer_standalone)
+    standalone.update(raw_standalone)
     standalone_status = str(standalone.get('status', 'not_configured') or 'not_configured').strip().lower()
     if standalone_status not in {'not_configured', 'pending', 'active', 'grace', 'expired', 'suspended', 'revoked'}:
         standalone_status = 'not_configured'
     cycle = str(standalone.get('cycle', '') or '').strip().lower()
     if cycle not in {'', 'monthly', 'annual'}:
         cycle = ''
+
+    publication = customer.get('publication') if isinstance(customer.get('publication'), dict) else {}
+    publication_status = str(publication.get('status', 'unknown') or 'unknown').strip().lower()
+    allowed_publication_states = {
+        'unknown', 'awaiting_gateway_observation', 'inactive_no_observation',
+        'gateway_observation_stale', 'active_in_sync',
+        'active_without_effective_entitlement', 'provisioning_in_progress',
+        'provisioning_without_effective_entitlement', 'gateway_state_unresolved',
+    }
+    if publication_status not in allowed_publication_states:
+        publication_status = 'unknown'
+    hostname = str(publication.get('hostname', '') or '').strip().lower().rstrip('.')
+    if hostname and not EXTERNAL_ACCESS_HOSTNAME_PATTERN.fullmatch(hostname):
+        hostname = ''
+    public_ready = bool(publication.get('public_ready', False)) and publication_status == 'active_in_sync' and bool(hostname)
+
+    customer_eligible = bool(customer.get('entitlement_eligible', False))
+    package_eligible = bool(entitlement.get('package_eligible', customer.get('package_eligible', False)))
+    standalone_eligible = bool(standalone.get('eligible', False))
+    eligible = bool(entitlement.get('eligible', False)) or customer_eligible or package_eligible or standalone_eligible
+
     return {
-        'eligible': bool(entitlement.get('eligible', False)),
+        'eligible': eligible,
         'eligibility_source': source,
-        'package_eligible': bool(entitlement.get('package_eligible', False)),
+        'package_eligible': package_eligible,
         'standalone': {
             'status': standalone_status,
-            'eligible': bool(standalone.get('eligible', False)),
+            'eligible': standalone_eligible,
             'starts_at': max(0, int(standalone.get('starts_at', 0) or 0)),
             'ends_at': max(0, int(standalone.get('ends_at', 0) or 0)),
             'cycle': cycle,
+        },
+        'publication': {
+            'status': publication_status,
+            'public_ready': public_ready,
+            'hostname': hostname,
         },
     }
 
@@ -568,7 +606,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.3'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.4'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -1652,6 +1690,7 @@ def external_access_customer_summary():
     """Sanitized read-only Managed External URL state for the vNext home screen."""
     connection = load_portal_connection()
     portal_entitlement = _normalize_external_access_portal_state(connection.get('external_access_portal'))
+    publication = portal_entitlement.get('publication') if isinstance(portal_entitlement.get('publication'), dict) else {}
     observation = external_access_gateway_observation_snapshot()
     tunnel = _external_access_tunnel_runtime_snapshot()
     tunnel_state = str(tunnel.get('state', 'off') or 'off')
@@ -1663,6 +1702,12 @@ def external_access_customer_summary():
     hostname = str(observation.get('canonical_hostname', '') or '').strip().lower()
     if hostname and not EXTERNAL_ACCESS_HOSTNAME_PATTERN.fullmatch(hostname):
         hostname = ''
+    portal_hostname = str(publication.get('hostname', '') or '').strip().lower()
+    if portal_hostname and not EXTERNAL_ACCESS_HOSTNAME_PATTERN.fullmatch(portal_hostname):
+        portal_hostname = ''
+    portal_public_ready = bool(publication.get('public_ready', False)) and bool(portal_hostname)
+    if portal_public_ready:
+        hostname = portal_hostname
     return {
         'supported': True,
         'installation_binding_present': bool(str(connection.get('installation_id', '') or '').strip() and str(connection.get('installation_token', '') or '').strip()),
@@ -1672,6 +1717,8 @@ def external_access_customer_summary():
         'observation_status': str(observation.get('status', '') or '')[:32],
         'hostname': hostname,
         'fresh': bool(observation.get('fresh', False)),
+        'portal_public_status': str(publication.get('status', 'unknown') or 'unknown')[:48],
+        'portal_public_ready': portal_public_ready,
         'entitlement_eligible': bool(portal_entitlement.get('eligible', False)),
         'eligibility_source': str(portal_entitlement.get('eligibility_source', 'none') or 'none')[:32],
         'package_eligible': bool(portal_entitlement.get('package_eligible', False)),
@@ -1770,6 +1817,9 @@ def pair_portal(code):
         'last_error': '',
     }
     update_portal_subscription(connection, response, verified_at=now)
+    external_portal_state = _portal_maybe_process_external_access(response)
+    if isinstance(external_portal_state, dict):
+        connection['external_access_portal'] = external_portal_state
     save_portal_connection(connection)
     tech_config = load_tech_settings()
     if connection['installation_id']:
