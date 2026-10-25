@@ -4,7 +4,7 @@
 
 ## Περιεχόμενο
 
-- **Smart Pro System 3.0.7** — ο τοπικός κόμβος σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασης.
+- **Smart Pro System 3.0.8** — ο τοπικός κόμβος σύνδεσης, κατάστασης και υπηρεσιών της εγκατάστασης.
 - **Smart Pro Tunnel 0.1.7** — απομονωμένο outbound tunnel runtime για το Managed External URL.
 - **Smart Pro Managed Support 3.19.2** — ασφαλές managed support runtime με σταθερή ταυτότητα και ελεγχόμενη απομακρυσμένη υποστήριξη.
 

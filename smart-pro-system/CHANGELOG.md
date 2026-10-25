@@ -1,3 +1,13 @@
+## 3.0.8 — Replacement Companion Recovery / Tunnel Pilot
+
+- Adds a fail-closed replacement-device recovery pilot for the official Smart Pro Tunnel companion app.
+- Requires verified Portal pairing plus a fresh effective Managed External URL entitlement before any recovery action is scheduled.
+- Discovers exactly one `Smart Pro Tunnel` entry from the Home Assistant store, requires the official tokenless Smart Pro repository and version 0.1.7 or newer, then installs it through the Supervisor Store API only when absent.
+- Performs one initial start with the Tunnel defaults (`enabled=false`) so the Tunnel creates its own persistent WireGuard identity and publishes public-only enrollment material.
+- Does not generate/copy/read the Tunnel private key, does not configure WireGuard/Gateway/DNS/public ingress and does not bypass the existing signed Control Plane.
+- Adds bounded sanitized recovery state under `smart_pro_tunnel_runtime.recovery` for QA/diagnostics and a 15-minute fail-backoff after recovery errors.
+- Keeps Managed Support automatic recovery out of scope for this pilot.
+
 ## 3.0.7 — HA Scoped Credential Unification
 
 - Uses the Home Assistant OS/Supervisor-scoped `SUPERVISOR_TOKEN` as the default Core API credential when available.

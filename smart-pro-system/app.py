@@ -124,6 +124,20 @@ EXTERNAL_ACCESS_HOSTNAME_PATTERN = re.compile(
 EXTERNAL_ACCESS_TUNNEL_NETWORK = ipaddress.ip_network('10.203.0.0/16')
 EXTERNAL_ACCESS_RESERVED_GATEWAY_NETWORK = ipaddress.ip_network('10.203.0.0/24')
 
+# vNext 3.0.8 replacement-device companion recovery pilot. The Smart Pro System
+# may install and perform one initial identity-only start of the official Smart Pro
+# Tunnel app when the verified Portal heartbeat says Managed External URL is
+# entitled and the Tunnel is absent. Runtime provisioning remains exclusively on
+# the existing signed Control Plane. No private key or Gateway credential is
+# generated, copied or persisted by this recovery layer.
+SMART_PRO_TUNNEL_RECOVERY_CONTRACT_ID = 'smart-pro-tunnel-recovery-v1'
+SMART_PRO_TUNNEL_RECOVERY_STATE_FILE = Path('/data/smart_pro_tunnel_recovery.json')
+SMART_PRO_TUNNEL_RECOVERY_STATE_LOCK = threading.RLock()
+SMART_PRO_TUNNEL_RECOVERY_WORKER_LOCK = threading.Lock()
+SMART_PRO_TUNNEL_RECOVERY_BACKOFF_SECONDS = 15 * 60
+SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL = 'https://github.com/smartprosystempp-spec/smart-pro-system-home-assistant'
+SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION = (0, 1, 7)
+
 
 def _external_access_gateway_observation_default():
     return {
@@ -633,7 +647,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.7'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.8'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -1647,6 +1661,7 @@ def smart_pro_tunnel_runtime_public_status(now=None):
         'private_proxy_state': str(transport.get('private_proxy_state', 'off') or 'off')[:32],
         'home_assistant_target_reachable': bool(transport.get('home_assistant_target_reachable', False)),
         'handshake_age_seconds': transport.get('handshake_age_seconds'),
+        'recovery': smart_pro_tunnel_recovery_public_status(),
     }
     addons_result, addons_error = _supervisor_api_json('/addons', 'GET')
     if not addons_error:
@@ -3868,6 +3883,7 @@ def send_portal_heartbeat():
         connection['latest_request'] = response.get('latest_request')
         update_portal_subscription(connection, response, verified_at=connection['last_heartbeat'])
         save_portal_connection(connection)
+        _schedule_smart_pro_tunnel_recovery(connection, external_portal_state)
         # Heartbeat also migrates old installs and clears stale local request state.
         settings_patch = {}
         if connection.get('installation_id'):
@@ -4467,11 +4483,13 @@ def _supervisor_api_json(path, method='GET', data=None, timeout=10):
     path = '/' + str(path or '').lstrip('/')
     slug_re = r'[a-z0-9_]{1,128}'
     allowed = False
-    if method == 'GET' and path in ('/supervisor/info', '/addons', '/core/info', '/backups/info'):
+    if method == 'GET' and path in ('/supervisor/info', '/addons', '/core/info', '/backups/info', '/store/addons'):
         allowed = True
     elif method == 'GET' and re.fullmatch(rf'/addons/{slug_re}/info', path):
         allowed = True
     elif method == 'POST' and re.fullmatch(rf'/addons/{slug_re}/(?:options|start|restart)', path):
+        allowed = True
+    elif method == 'POST' and re.fullmatch(rf'/store/addons/{slug_re}/install', path):
         allowed = True
     if not allowed:
         return None, 'endpoint_not_allowed'
@@ -4523,6 +4541,292 @@ def _supervisor_api_json(path, method='GET', data=None, timeout=10):
             return None, 'supervisor_error'
         payload = payload.get('data')
     return payload, ''
+
+
+def _smart_pro_tunnel_recovery_default():
+    return {
+        'contract': SMART_PRO_TUNNEL_RECOVERY_CONTRACT_ID,
+        'state': 'idle',
+        'reason_code': 'not_evaluated',
+        'last_attempt_at': 0,
+        'last_success_at': 0,
+        'store_slug_hint': '',
+        'tunnel_version': '',
+        'installation_id': '',
+    }
+
+
+def load_smart_pro_tunnel_recovery_state():
+    with SMART_PRO_TUNNEL_RECOVERY_STATE_LOCK:
+        state = _smart_pro_tunnel_recovery_default()
+        if SMART_PRO_TUNNEL_RECOVERY_STATE_FILE.exists():
+            try:
+                stored = json.loads(SMART_PRO_TUNNEL_RECOVERY_STATE_FILE.read_text(encoding='utf-8'))
+                if isinstance(stored, dict):
+                    state.update(stored)
+            except Exception:
+                pass
+        return state
+
+
+def save_smart_pro_tunnel_recovery_state(state):
+    with SMART_PRO_TUNNEL_RECOVERY_STATE_LOCK:
+        safe = _smart_pro_tunnel_recovery_default()
+        if isinstance(state, dict):
+            safe.update(state)
+        safe['contract'] = SMART_PRO_TUNNEL_RECOVERY_CONTRACT_ID
+        safe['state'] = str(safe.get('state', 'idle') or 'idle')[:48]
+        safe['reason_code'] = str(safe.get('reason_code', '') or '')[:64]
+        safe['last_attempt_at'] = max(0, int(safe.get('last_attempt_at', 0) or 0))
+        safe['last_success_at'] = max(0, int(safe.get('last_success_at', 0) or 0))
+        safe['store_slug_hint'] = str(safe.get('store_slug_hint', '') or '')[-32:]
+        safe['tunnel_version'] = str(safe.get('tunnel_version', '') or '')[:32]
+        safe['installation_id'] = str(safe.get('installation_id', '') or '')[:32]
+        SMART_PRO_TUNNEL_RECOVERY_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SMART_PRO_TUNNEL_RECOVERY_STATE_FILE.with_suffix('.tmp')
+        tmp.write_text(json.dumps(safe, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, SMART_PRO_TUNNEL_RECOVERY_STATE_FILE)
+        os.chmod(SMART_PRO_TUNNEL_RECOVERY_STATE_FILE, 0o600)
+        return safe
+
+
+def smart_pro_tunnel_recovery_public_status():
+    state = load_smart_pro_tunnel_recovery_state()
+    return {
+        'contract': SMART_PRO_TUNNEL_RECOVERY_CONTRACT_ID,
+        'state': str(state.get('state', 'idle') or 'idle')[:48],
+        'reason_code': str(state.get('reason_code', '') or '')[:64],
+        'last_attempt_at': max(0, int(state.get('last_attempt_at', 0) or 0)),
+        'last_success_at': max(0, int(state.get('last_success_at', 0) or 0)),
+        'store_slug_hint': str(state.get('store_slug_hint', '') or '')[-32:],
+        'tunnel_version': str(state.get('tunnel_version', '') or '')[:32],
+    }
+
+
+def _smart_pro_tunnel_version_tuple(value):
+    numbers = [int(item) for item in re.findall(r'\d+', str(value or ''))[:3]]
+    while len(numbers) < 3:
+        numbers.append(0)
+    return tuple(numbers[:3])
+
+
+def _smart_pro_tunnel_installed_match():
+    addons, error = _supervisor_api_json('/addons', 'GET')
+    if error:
+        return None, 'supervisor_addons_' + error
+    if isinstance(addons, dict):
+        items = addons.get('addons') if isinstance(addons.get('addons'), list) else []
+    elif isinstance(addons, list):
+        items = addons
+    else:
+        return None, 'supervisor_addons_invalid'
+    matches = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get('slug', '') or '').strip().lower()
+        name = str(item.get('name', '') or '').strip()
+        if name == 'Smart Pro Tunnel' and (slug == 'smart_pro_tunnel' or slug.endswith('_smart_pro_tunnel')):
+            matches.append(item)
+    if len(matches) > 1:
+        return None, 'installed_match_ambiguous'
+    return (matches[0] if matches else None), ''
+
+
+def _smart_pro_tunnel_store_match():
+    store, error = _supervisor_api_json('/store/addons', 'GET', timeout=20)
+    if error:
+        return None, 'store_addons_' + error
+    if isinstance(store, dict):
+        items = store.get('addons') if isinstance(store.get('addons'), list) else []
+    elif isinstance(store, list):
+        items = store
+    else:
+        return None, 'store_addons_invalid'
+    expected_repository = SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL.rstrip('/').lower()
+    matches = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get('slug', '') or '').strip().lower()
+        name = str(item.get('name', '') or '').strip()
+        repository = str(item.get('repository', '') or '').strip().rstrip('/').lower()
+        if name != 'Smart Pro Tunnel':
+            continue
+        if not (slug == 'smart_pro_tunnel' or slug.endswith('_smart_pro_tunnel')):
+            continue
+        if repository != expected_repository:
+            continue
+        if _smart_pro_tunnel_version_tuple(item.get('version')) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
+            continue
+        matches.append(item)
+    if len(matches) != 1:
+        return None, 'store_match_missing' if not matches else 'store_match_ambiguous'
+    return matches[0], ''
+
+
+def _smart_pro_tunnel_recovery_worker(installation_id):
+    attempt_at = int(time.time())
+    state = load_smart_pro_tunnel_recovery_state()
+    state.update({
+        'state': 'preflight',
+        'reason_code': 'checking_installed_state',
+        'last_attempt_at': attempt_at,
+        'installation_id': str(installation_id or '')[:32],
+    })
+    save_smart_pro_tunnel_recovery_state(state)
+    try:
+        installed, error = _smart_pro_tunnel_installed_match()
+        if error:
+            raise RuntimeError(error)
+
+        slug = ''
+        version = ''
+        raw_state = ''
+        if isinstance(installed, dict):
+            slug = str(installed.get('slug', '') or '').strip().lower()
+            version = str(installed.get('version', '') or '').strip()
+            raw_state = str(installed.get('state', '') or '').strip().lower()
+            if _smart_pro_tunnel_version_tuple(version) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
+                raise RuntimeError('installed_version_too_old')
+            state.update({
+                'state': 'installed',
+                'reason_code': 'official_tunnel_already_installed',
+                'store_slug_hint': slug[-32:],
+                'tunnel_version': version[:32],
+            })
+            save_smart_pro_tunnel_recovery_state(state)
+        else:
+            store_item, error = _smart_pro_tunnel_store_match()
+            if error or not isinstance(store_item, dict):
+                raise RuntimeError(error or 'store_match_missing')
+            slug = str(store_item.get('slug', '') or '').strip().lower()
+            version = str(store_item.get('version', '') or '').strip()
+            state.update({
+                'state': 'installing',
+                'reason_code': 'official_store_install_started',
+                'store_slug_hint': slug[-32:],
+                'tunnel_version': version[:32],
+            })
+            save_smart_pro_tunnel_recovery_state(state)
+            _, error = _supervisor_api_json(
+                f'/store/addons/{slug}/install',
+                'POST',
+                {'background': False},
+                timeout=180,
+            )
+            if error:
+                raise RuntimeError('install_' + error)
+            info, error = _supervisor_api_json(f'/addons/{slug}/info', 'GET', timeout=20)
+            if error or not isinstance(info, dict):
+                raise RuntimeError('post_install_info_' + (error or 'invalid'))
+            if str(info.get('name', '') or '').strip() != 'Smart Pro Tunnel':
+                raise RuntimeError('post_install_name_mismatch')
+            version = str(info.get('version', '') or '').strip()
+            if _smart_pro_tunnel_version_tuple(version) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
+                raise RuntimeError('post_install_version_too_old')
+            raw_state = str(info.get('state', '') or '').strip().lower()
+            state.update({
+                'state': 'installed',
+                'reason_code': 'official_store_install_complete',
+                'tunnel_version': version[:32],
+            })
+            save_smart_pro_tunnel_recovery_state(state)
+
+        if raw_state not in ('started', 'running'):
+            state.update({'state': 'starting_identity', 'reason_code': 'initial_identity_start'})
+            save_smart_pro_tunnel_recovery_state(state)
+            _, error = _supervisor_api_json(f'/addons/{slug}/start', 'POST', timeout=45)
+            if error:
+                raise RuntimeError('start_' + error)
+
+        # The Tunnel writes public-only enrollment material almost immediately on
+        # startup. Observe only a fresh publication from this attempt; never read
+        # or copy its private key.
+        deadline = time.time() + 20
+        enrollment_ready = False
+        while time.time() < deadline:
+            enrollment = _external_access_tunnel_enrollment_snapshot()
+            if (
+                enrollment.get('valid')
+                and int(enrollment.get('observed_at', 0) or 0) >= attempt_at
+                and _smart_pro_tunnel_version_tuple(enrollment.get('tunnel_version')) >= SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION
+            ):
+                enrollment_ready = True
+                version = str(enrollment.get('tunnel_version', version) or version)
+                break
+            time.sleep(1)
+
+        state.update({
+            'state': 'identity_ready' if enrollment_ready else 'identity_pending',
+            'reason_code': 'public_enrollment_ready' if enrollment_ready else 'public_enrollment_pending',
+            'last_success_at': int(time.time()),
+            'tunnel_version': version[:32],
+        })
+        save_smart_pro_tunnel_recovery_state(state)
+        smart_pro_tunnel_runtime_public_status._cache = None
+        print(f'[RECOVERY] Smart Pro Tunnel companion recovery -> {state["state"]}', flush=True)
+    except Exception as exc:
+        reason = str(exc or 'recovery_failed')[:64]
+        state = load_smart_pro_tunnel_recovery_state()
+        state.update({
+            'state': 'failed',
+            'reason_code': reason,
+            'last_attempt_at': attempt_at,
+            'installation_id': str(installation_id or '')[:32],
+        })
+        save_smart_pro_tunnel_recovery_state(state)
+        smart_pro_tunnel_runtime_public_status._cache = None
+        print(f'[RECOVERY] Smart Pro Tunnel companion recovery failed: {reason}', flush=True)
+    finally:
+        SMART_PRO_TUNNEL_RECOVERY_WORKER_LOCK.release()
+
+
+def _schedule_smart_pro_tunnel_recovery(connection, external_portal_state):
+    if not isinstance(connection, dict) or not isinstance(external_portal_state, dict):
+        return False
+    installation_id = str(connection.get('installation_id', '') or '').strip()
+    token_present = bool(str(connection.get('installation_token', '') or '').strip())
+    if not installation_id or not token_present:
+        return False
+    if not bool(external_portal_state.get('eligible', False)):
+        return False
+
+    subscription = portal_subscription_public(connection)
+    if not bool(subscription.get('verification_valid', False)):
+        return False
+
+    runtime = smart_pro_tunnel_runtime_public_status()
+    state = load_smart_pro_tunnel_recovery_state()
+    now = int(time.time())
+
+    # Never take over an independently installed/stopped Tunnel. A stopped app is
+    # eligible for automatic retry only when this recovery state proves that the
+    # 3.0.8 recovery worker itself already installed/started that companion and a
+    # previous recovery step failed before identity publication completed.
+    if bool(runtime.get('installed', False)):
+        recovery_owned = bool(str(state.get('store_slug_hint', '') or '').strip()) and str(state.get('state', '') or '') in {
+            'installing', 'installed', 'starting_identity', 'identity_pending', 'failed'
+        }
+        if bool(runtime.get('running', False)) or not recovery_owned:
+            return False
+
+    if str(state.get('state', '') or '') == 'failed':
+        last_attempt = int(state.get('last_attempt_at', 0) or 0)
+        if last_attempt and now - last_attempt < SMART_PRO_TUNNEL_RECOVERY_BACKOFF_SECONDS:
+            return False
+
+    if not SMART_PRO_TUNNEL_RECOVERY_WORKER_LOCK.acquire(blocking=False):
+        return False
+    thread = threading.Thread(
+        target=_smart_pro_tunnel_recovery_worker,
+        args=(installation_id,),
+        name='smart-pro-tunnel-recovery',
+        daemon=True,
+    )
+    thread.start()
+    return True
 
 
 def notify_ha_client(token, title, message):
