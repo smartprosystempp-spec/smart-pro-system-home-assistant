@@ -647,7 +647,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.8'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.9'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -4658,7 +4658,7 @@ def _smart_pro_tunnel_store_match():
             continue
         if repository != expected_repository:
             continue
-        if _smart_pro_tunnel_version_tuple(item.get('version')) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
+        if _smart_pro_tunnel_version_tuple(item.get('version_latest') or item.get('version')) < SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION:
             continue
         matches.append(item)
     if len(matches) != 1:
@@ -4702,7 +4702,7 @@ def _smart_pro_tunnel_recovery_worker(installation_id):
             if error or not isinstance(store_item, dict):
                 raise RuntimeError(error or 'store_match_missing')
             slug = str(store_item.get('slug', '') or '').strip().lower()
-            version = str(store_item.get('version', '') or '').strip()
+            version = str(store_item.get('version_latest') or store_item.get('version') or '').strip()
             state.update({
                 'state': 'installing',
                 'reason_code': 'official_store_install_started',

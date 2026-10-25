@@ -1,3 +1,10 @@
+## 3.0.9 — Tunnel Store Discovery Version Contract Fix
+
+- Fixes replacement Tunnel recovery discovery for uninstalled Store apps.
+- Uses Supervisor `version_latest` as the authoritative available Store version, with `version` only as compatibility fallback.
+- Keeps exact name/slug/repository validation, fail-closed discovery, install/start ownership boundaries and signed Control Plane authority unchanged.
+- No Portal, Tunnel, Managed Support, subscription, provisioning or schema changes.
+
 ## 3.0.8 — Replacement Companion Recovery / Tunnel Pilot
 
 - Adds a fail-closed replacement-device recovery pilot for the official Smart Pro Tunnel companion app.
