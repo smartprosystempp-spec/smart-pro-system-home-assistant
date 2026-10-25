@@ -437,7 +437,7 @@ def _normalize_external_access_portal_state(external):
     entitlement = external.get('entitlement') if isinstance(external.get('entitlement'), dict) else {}
     customer = external.get('customer_state') if isinstance(external.get('customer_state'), dict) else {}
 
-    source = str(entitlement.get('eligibility_source', customer.get('eligibility_source', 'none')) or 'none').strip().lower()
+    source = str(entitlement.get('eligibility_source', customer.get('eligibility_source', external.get('eligibility_source', 'none'))) or 'none').strip().lower()
     if source not in {'none', 'package', 'standalone', 'package_and_standalone'}:
         source = 'none'
 
@@ -470,7 +470,7 @@ def _normalize_external_access_portal_state(external):
     customer_eligible = bool(customer.get('entitlement_eligible', False))
     package_eligible = bool(entitlement.get('package_eligible', customer.get('package_eligible', False)))
     standalone_eligible = bool(standalone.get('eligible', False))
-    eligible = bool(entitlement.get('eligible', False)) or customer_eligible or package_eligible or standalone_eligible
+    eligible = bool(external.get('eligible', False)) or bool(entitlement.get('eligible', False)) or customer_eligible or package_eligible or standalone_eligible
 
     return {
         'eligible': eligible,
@@ -493,9 +493,29 @@ def _normalize_external_access_portal_state(external):
 
 def _portal_maybe_process_external_access(response):
     external = response.get('external_access') if isinstance(response, dict) else None
-    if not isinstance(external, dict) or str(external.get('contract', '') or '') != EXTERNAL_ACCESS_AGENT_CONTRACT_ID:
-        return None
-    portal_state = _normalize_external_access_portal_state(external)
+    customer_bridge = response.get('external_access_customer') if isinstance(response, dict) else None
+
+    external_valid = isinstance(external, dict) and str(external.get('contract', '') or '') == EXTERNAL_ACCESS_AGENT_CONTRACT_ID
+    bridge_valid = isinstance(customer_bridge, dict) and str(customer_bridge.get('contract', '') or '') == 'smart-pro-external-access-customer-state-v1'
+
+    if external_valid:
+        portal_state = _normalize_external_access_portal_state(external)
+    else:
+        portal_state = _normalize_external_access_portal_state({})
+
+    # 3.0.5: the customer bridge is intentionally separate from the runtime
+    # authority contract. It survives older External Access response schemas and
+    # carries only read-only entitlement/publication presentation truth.
+    if bridge_valid:
+        if customer_bridge.get('read_only') is True and customer_bridge.get('runtime_authority') is False:
+            bridge_state = _normalize_external_access_portal_state({'customer_state': customer_bridge})
+            portal_state = bridge_state
+        else:
+            print('[EXTURL] Customer heartbeat bridge advertised unsafe flags; ignored.', flush=True)
+
+    if not external_valid:
+        return portal_state if bridge_valid else None
+
     runtime = external.get('runtime') if isinstance(external.get('runtime'), dict) else {}
     forbidden = (
         'tunnel_transport_authorized',
@@ -522,6 +542,7 @@ def _portal_maybe_process_external_access(response):
         EXTERNAL_ACCESS_GATEWAY_OBSERVATION.clear()
         EXTERNAL_ACCESS_GATEWAY_OBSERVATION.update(normalized)
     return portal_state
+
 
 # Generation-1 authority manifest. This is the single source of truth for both
 # command execution and the read-only capability declaration sent to Portal.
@@ -606,7 +627,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.4'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.5'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 

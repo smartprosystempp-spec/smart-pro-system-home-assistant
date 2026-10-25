@@ -1,3 +1,10 @@
+## 3.0.5 — External URL Customer Heartbeat Compatibility Bridge
+
+- Consumes the Portal 3.6.294 customer-safe `external_access_customer` heartbeat bridge as authoritative presentation state.
+- Adds backward-compatible fallback to legacy top-level External Access `eligible` / `eligibility_source` fields.
+- Keeps Tunnel runtime and Gateway observation handling independent from commercial entitlement/publication presentation.
+- Does not grant runtime authority, start/stop services, change DNS, or expose credentials.
+
 ## 3.0.4 — External URL Heartbeat Synchronization Hotfix
 
 - Consumes and persists durable Portal-owned standalone entitlement/publication presentation state.

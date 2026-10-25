@@ -1,6 +1,6 @@
 name: "Smart Pro System"
 description: "Κέντρο σύνδεσης, κατάστασης και υπηρεσιών Smart Pro System για Home Assistant."
-version: "3.0.4"
+version: "3.0.5"
 slug: "smart_pro_tools"
 init: false
 panel_icon: "mdi:home-cog"
