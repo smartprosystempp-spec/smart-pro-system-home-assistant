@@ -142,7 +142,7 @@ function applySubscriptionServiceUiGates() {
             guardianTab,
             'guardianSubscriptionGateNotice',
             !guardianAllowed,
-            '🔒 Ο Φρουρός είναι ανενεργός από τη συνδρομή. Οι αποθηκευμένες ρυθμίσεις διατηρούνται και θα επανέλθουν όταν αποκατασταθεί η κάλυψη.'
+            '🔒 Ο Φρουρός δεν είναι διαθέσιμος στην τρέχουσα κατάσταση υπηρεσιών. Οι αποθηκευμένες ρυθμίσεις διατηρούνται και θα επανέλθουν όταν υπάρχει ενεργό δικαίωμα.'
         );
         setSubscriptionLockedControls(Array.from(guardianTab.querySelectorAll('input, select, textarea, button')), !guardianAllowed);
     }
@@ -153,7 +153,7 @@ function applySubscriptionServiceUiGates() {
             updatesCard.querySelector('.auto-card-content') || updatesCard,
             'updatesSubscriptionGateNotice',
             !updatesAllowed,
-            '🔒 Τα Smart Updates είναι ανενεργά από τη συνδρομή. Η υπάρχουσα πολιτική διατηρείται χωρίς να εκτελείται.'
+            '🔒 Τα Smart Updates δεν είναι διαθέσιμα στην τρέχουσα κατάσταση υπηρεσιών. Η υπάρχουσα πολιτική διατηρείται χωρίς να εκτελείται.'
         );
         const ids = [
             'ts_auto_update_enabled', 'upd_core', 'upd_os', 'upd_addons',
@@ -385,38 +385,76 @@ function spsRuntimeLabel(runtime) {
     return labels[state] || ['Άγνωστη κατάσταση', 'muted'];
 }
 
+function spsTunnelRuntimeLabel(runtime) {
+    runtime = runtime || {};
+    const processState = String(runtime.state || 'unavailable');
+    const transportState = String(runtime.transport_state || 'off');
+    const proxyState = String(runtime.private_proxy_state || 'off');
+    if (processState === 'not_installed') return ['Δεν έχει εγκατασταθεί', 'muted'];
+    if (processState === 'stopped') return ['Εγκατεστημένο · Σταματημένο', 'attention'];
+    if (processState === 'error') return ['Σφάλμα add-on', 'bad'];
+    if (processState === 'unavailable') return ['Δεν ήταν δυνατός ο έλεγχος', 'muted'];
+    if (processState !== 'running') return ['Εγκατεστημένο · Άγνωστη κατάσταση', 'attention'];
+    if (transportState === 'connected' && proxyState === 'listening') return ['Tunnel συνδεδεμένο · Proxy ενεργό', 'good'];
+    if (transportState === 'connected') return ['Tunnel συνδεδεμένο · Proxy σε αναμονή', 'attention'];
+    if (transportState === 'starting' || transportState === 'up_no_handshake') return ['Tunnel εκκινεί · Αναμονή σύνδεσης', 'attention'];
+    if (transportState === 'handshake_stale') return ['Tunnel χρειάζεται έλεγχο', 'bad'];
+    if (transportState === 'failed') return ['Tunnel runtime σφάλμα', 'bad'];
+    if (transportState === 'identity_ready' || transportState === 'off' || transportState === 'stopped') return ['Add-on ενεργό · Tunnel ανενεργό', 'attention'];
+    return ['Add-on ενεργό · Runtime άγνωστο', 'attention'];
+}
+
 function renderVNextOverview(status) {
     status = status || {};
     const subscription = status.subscription || {};
+    const access = subscription.service_access || {};
+    const external = status.external_access_summary || {};
+    const standalone = external.standalone_entitlement || {};
     const mode = document.getElementById('customerModeBadge');
     const installationName = document.getElementById('uiInstallationName');
     const servicesNote = document.getElementById('servicesContextNote');
+    const isTrial = portalTrialActive(subscription);
+    const paidPlan = subscription && subscription.available && ['care', 'advanced', 'complete'].includes(String(subscription.plan || ''));
+    const standaloneActive = standalone.eligible === true || (external.entitlement_eligible === true && ['standalone', 'package_and_standalone'].includes(String(external.eligibility_source || '')));
 
     if (!status.connected) {
         if (mode) { mode.textContent = 'Μη συνδεδεμένο'; mode.dataset.tone = 'muted'; }
         if (installationName) installationName.textContent = 'Δεν έχει συνδεθεί';
         if (servicesNote) servicesNote.textContent = 'Συνδέστε την εγκατάσταση με προσωρινό κωδικό από το Portal για να εμφανιστούν οι υπηρεσίες της.';
-    } else if (subscription && subscription.available) {
-        if (mode) { mode.textContent = 'Συνδρομητής Smart Pro'; mode.dataset.tone = 'good'; }
+    } else if (isTrial) {
+        if (mode) { mode.textContent = 'Δοκιμαστική εγκατάσταση'; mode.dataset.tone = 'attention'; }
         if (installationName) installationName.textContent = status.installation_name || status.installation_id || 'Συνδεδεμένη εγκατάσταση';
-        if (servicesNote) servicesNote.textContent = 'Οι παρακάτω καταστάσεις προέρχονται από το Portal και από πραγματικό έλεγχο των τοπικών runtimes.';
-    } else {
+        if (servicesNote) servicesNote.textContent = standaloneActive
+            ? 'Η δοκιμαστική περίοδος παραμένει ενεργή. Οι αγορασμένες standalone υπηρεσίες εμφανίζονται και λειτουργούν ανεξάρτητα από τα Trial benefits.'
+            : 'Η δοκιμαστική περίοδος είναι onboarding κατάσταση και δεν ισοδυναμεί με πληρωμένο πακέτο.';
+    } else if (paidPlan) {
+        if (mode) { mode.textContent = 'Συνδρομητική εγκατάσταση'; mode.dataset.tone = access.paid_services_active ? 'good' : 'attention'; }
+        if (installationName) installationName.textContent = status.installation_name || status.installation_id || 'Συνδεδεμένη εγκατάσταση';
+        if (servicesNote) servicesNote.textContent = 'Οι παρακάτω καταστάσεις ξεχωρίζουν το πακέτο, την τρέχουσα πρόσβαση και το πραγματικό τοπικό runtime.';
+    } else if (standaloneActive) {
         if (mode) { mode.textContent = 'Standalone / εφάπαξ υπηρεσία'; mode.dataset.tone = 'info'; }
         if (installationName) installationName.textContent = status.installation_name || status.installation_id || 'Συνδεδεμένη εγκατάσταση';
-        if (servicesNote) servicesNote.textContent = 'Δεν υπάρχει ενεργό συνδρομητικό πακέτο. Εμφανίζονται μόνο οι υπηρεσίες που είναι διαθέσιμες ή εγκατεστημένες για αυτή την εγκατάσταση.';
-        const uiPlan = document.getElementById('uiCompactPlan');
-        const uiDays = document.getElementById('uiCompactDays');
-        if (uiPlan) { uiPlan.textContent = 'Standalone Smart Pro'; uiPlan.style.color = ''; }
-        if (uiDays) uiDays.textContent = '--';
+        if (servicesNote) servicesNote.textContent = 'Δεν υπάρχει συνδρομητικό πακέτο. Εμφανίζονται μόνο οι standalone υπηρεσίες και τα πραγματικά τοπικά runtimes αυτής της εγκατάστασης.';
+    } else {
+        if (mode) { mode.textContent = 'Χωρίς ενεργό πακέτο'; mode.dataset.tone = 'info'; }
+        if (installationName) installationName.textContent = status.installation_name || status.installation_id || 'Συνδεδεμένη εγκατάσταση';
+        if (servicesNote) servicesNote.textContent = 'Η εγκατάσταση είναι συνδεδεμένη, αλλά δεν υπάρχει ενεργό πληρωμένο πακέτο ή standalone υπηρεσία.';
     }
 
     const managedRuntime = spsRuntimeLabel(status.managed_support_runtime || {});
-    const tunnelRuntime = spsRuntimeLabel(status.smart_pro_tunnel_runtime || {});
+    const tunnelRuntime = spsTunnelRuntimeLabel(status.smart_pro_tunnel_runtime || {});
     const entitlements = (subscription && subscription.entitlements) || {};
+    const packageEntitlements = (subscription && subscription.package_entitlements) || {};
     let managedEntitlement = ['Δεν περιλαμβάνεται', 'muted'];
     if (!status.connected) managedEntitlement = ['Μετά τη σύνδεση', 'muted'];
-    else if (subscription && subscription.available && entitlements.managed_remote_support === true) managedEntitlement = ['Περιλαμβάνεται', 'good'];
-    else if (!subscription || !subscription.available) managedEntitlement = ['Standalone / μη διαθέσιμο', 'muted'];
+    else if (isTrial) managedEntitlement = ['Δεν ενεργοποιείται στο Trial', 'muted'];
+    else if (paidPlan && packageEntitlements.managed_remote_support === true) {
+        if (entitlements.managed_remote_support === true) managedEntitlement = ['Περιλαμβάνεται · Ενεργό', 'good'];
+        else if (String(access.state || '') === 'expired') managedEntitlement = ['Περιλαμβάνεται · Ανενεργό λόγω λήξης', 'attention'];
+        else if (String(access.state || '') === 'suspended') managedEntitlement = ['Περιλαμβάνεται · Σε αναστολή', 'attention'];
+        else managedEntitlement = ['Περιλαμβάνεται · Αναμονή πρόσβασης', 'attention'];
+    } else if (paidPlan) managedEntitlement = ['Δεν περιλαμβάνεται στο πακέτο', 'muted'];
+    else managedEntitlement = ['Δεν περιλαμβάνεται', 'muted'];
     spsSetText('serviceManagedEntitlement', managedEntitlement[0], managedEntitlement[1]);
     spsSetText('serviceManagedRuntime', managedRuntime[0], managedRuntime[1]);
     spsSetText('serviceTunnelRuntime', tunnelRuntime[0], tunnelRuntime[1]);
@@ -429,14 +467,26 @@ function renderVNextOverview(status) {
     if (backup.upload_result_state && ['failed','error'].includes(String(backup.upload_result_state).toLowerCase())) { backupLabel = 'Απαιτεί έλεγχο'; backupTone = 'bad'; }
     spsSetText('serviceBackupState', backupLabel, backupTone);
 
-    const external = status.external_access_summary || {};
     const externalLink = document.getElementById('serviceExternalUrlLink');
+    const cycleLabel = String(standalone.cycle || '') === 'annual' ? 'Ετήσιο' : (String(standalone.cycle || '') === 'monthly' ? 'Μηνιαίο' : '');
+    let externalEntitlementLabel = 'Δεν υπάρχει ενεργό δικαίωμα';
+    let externalEntitlementTone = 'muted';
+    if (external.package_eligible === true && standalone.eligible === true) { externalEntitlementLabel = 'Πακέτο + Standalone'; externalEntitlementTone = 'good'; }
+    else if (external.package_eligible === true) { externalEntitlementLabel = 'Περιλαμβάνεται στο πακέτο'; externalEntitlementTone = 'good'; }
+    else if (standalone.eligible === true) { externalEntitlementLabel = cycleLabel ? `Standalone ενεργό · ${cycleLabel}` : 'Standalone ενεργό'; externalEntitlementTone = 'good'; }
+    else if (['expired','suspended','revoked'].includes(String(standalone.status || ''))) { externalEntitlementLabel = `Standalone · ${String(standalone.status).replaceAll('_',' ')}`; externalEntitlementTone = 'attention'; }
+    spsSetText('serviceExternalUrlEntitlement', externalEntitlementLabel, externalEntitlementTone);
+
     let externalLabel = 'Δεν έχει ρυθμιστεί';
     let externalTone = 'muted';
     const registryState = String(external.registry_state || '');
-    if (registryState === 'active' && external.hostname) { externalLabel = 'Ενεργό'; externalTone = 'good'; }
-    else if (registryState && registryState !== 'unknown') { externalLabel = 'Σε ρύθμιση · ' + registryState.replaceAll('_', ' '); externalTone = 'attention'; }
-    else if (String(external.tunnel_runtime || '') === 'connected') { externalLabel = 'Tunnel συνδεδεμένο · αναμονή URL'; externalTone = 'attention'; }
+    const tunnelState = String(external.tunnel_runtime || 'off');
+    const gatewayState = String(external.gateway_state || 'not_configured');
+    if (registryState === 'active' && external.hostname) { externalLabel = 'Online · Public URL ενεργό'; externalTone = 'good'; }
+    else if (registryState && registryState !== 'unknown') { externalLabel = 'Provisioning · ' + registryState.replaceAll('_', ' '); externalTone = 'attention'; }
+    else if (tunnelState === 'connected' && gatewayState === 'private_ready') { externalLabel = 'Private tunnel έτοιμο · αναμονή public URL'; externalTone = 'attention'; }
+    else if (['starting','up_no_handshake','handshake_stale'].includes(tunnelState)) { externalLabel = 'Tunnel σε ρύθμιση · αναμονή provisioning'; externalTone = 'attention'; }
+    else if (external.entitlement_eligible === true) { externalLabel = 'Αγορασμένο · αναμονή provisioning'; externalTone = 'attention'; }
     spsSetText('serviceExternalUrlState', externalLabel, externalTone);
     if (externalLink) {
         if (registryState === 'active' && external.hostname) {

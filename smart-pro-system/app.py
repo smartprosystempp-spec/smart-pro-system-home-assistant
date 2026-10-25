@@ -412,10 +412,52 @@ def external_access_agent_heartbeat_snapshot():
     }
 
 
+def _normalize_external_access_portal_state(external):
+    """Minimize Portal-owned External URL entitlement state for presentation only."""
+    default = {
+        'eligible': False,
+        'eligibility_source': 'none',
+        'package_eligible': False,
+        'standalone': {
+            'status': 'not_configured',
+            'eligible': False,
+            'starts_at': 0,
+            'ends_at': 0,
+            'cycle': '',
+        },
+    }
+    if not isinstance(external, dict):
+        return default
+    entitlement = external.get('entitlement') if isinstance(external.get('entitlement'), dict) else {}
+    source = str(entitlement.get('eligibility_source', 'none') or 'none').strip().lower()
+    if source not in {'none', 'package', 'standalone', 'package_and_standalone'}:
+        source = 'none'
+    standalone = entitlement.get('standalone') if isinstance(entitlement.get('standalone'), dict) else {}
+    standalone_status = str(standalone.get('status', 'not_configured') or 'not_configured').strip().lower()
+    if standalone_status not in {'not_configured', 'pending', 'active', 'grace', 'expired', 'suspended', 'revoked'}:
+        standalone_status = 'not_configured'
+    cycle = str(standalone.get('cycle', '') or '').strip().lower()
+    if cycle not in {'', 'monthly', 'annual'}:
+        cycle = ''
+    return {
+        'eligible': bool(entitlement.get('eligible', False)),
+        'eligibility_source': source,
+        'package_eligible': bool(entitlement.get('package_eligible', False)),
+        'standalone': {
+            'status': standalone_status,
+            'eligible': bool(standalone.get('eligible', False)),
+            'starts_at': max(0, int(standalone.get('starts_at', 0) or 0)),
+            'ends_at': max(0, int(standalone.get('ends_at', 0) or 0)),
+            'cycle': cycle,
+        },
+    }
+
+
 def _portal_maybe_process_external_access(response):
     external = response.get('external_access') if isinstance(response, dict) else None
     if not isinstance(external, dict) or str(external.get('contract', '') or '') != EXTERNAL_ACCESS_AGENT_CONTRACT_ID:
-        return False
+        return None
+    portal_state = _normalize_external_access_portal_state(external)
     runtime = external.get('runtime') if isinstance(external.get('runtime'), dict) else {}
     forbidden = (
         'tunnel_transport_authorized',
@@ -425,23 +467,23 @@ def _portal_maybe_process_external_access(response):
         'public_ingress_authorized',
     )
     if any(bool(runtime.get(key, False)) for key in forbidden):
-        print('[EXTURL] Portal advertised External URL runtime authority before the read-only Gateway observation boundary; refused fail-closed.', flush=True)
-        return False
+        print('[EXTURL] Portal advertised External URL runtime authority outside the signed control-plane path; refused fail-closed.', flush=True)
+        return portal_state
 
     observation = external.get('gateway_observation')
     if observation is None:
-        return False
+        return portal_state
 
     try:
         normalized = _external_access_normalize_gateway_observation(observation)
     except Exception as exc:
         print(f'[EXTURL] Read-only Gateway observation rejected: {str(exc)[:96]}', flush=True)
-        return False
+        return portal_state
 
     with EXTERNAL_ACCESS_GATEWAY_OBSERVATION_LOCK:
         EXTERNAL_ACCESS_GATEWAY_OBSERVATION.clear()
         EXTERNAL_ACCESS_GATEWAY_OBSERVATION.update(normalized)
-    return True
+    return portal_state
 
 # Generation-1 authority manifest. This is the single source of truth for both
 # command execution and the read-only capability declaration sent to Portal.
@@ -761,6 +803,11 @@ def normalize_portal_subscription(value):
         key: bool(raw_entitlements.get(key, False))
         for key in sorted(SUBSCRIPTION_ENTITLEMENTS)
     }
+    raw_package_entitlements = value.get('package_entitlements') if isinstance(value.get('package_entitlements'), dict) else {}
+    package_entitlements = {
+        key: bool(raw_package_entitlements.get(key, False))
+        for key in sorted(SUBSCRIPTION_ENTITLEMENTS)
+    }
 
     raw_access = value.get('service_access') if isinstance(value.get('service_access'), dict) else {}
     access_contract = str(raw_access.get('contract_version', '') or '').strip()[:80]
@@ -806,6 +853,7 @@ def normalize_portal_subscription(value):
         'grace_until': _subscription_optional_int(value.get('grace_until')),
         'days_remaining': days_remaining,
         'entitlements': entitlements,
+        'package_entitlements': package_entitlements,
         'service_access': service_access,
         'last_changed_at': _subscription_optional_int(value.get('last_changed_at')),
         'grace_days': max(0, _subscription_optional_int(value.get('grace_days')) or 7),
@@ -1523,12 +1571,17 @@ def smart_pro_tunnel_runtime_public_status(now=None):
         if isinstance(value, dict):
             return dict(value)
 
+    transport = _external_access_tunnel_runtime_snapshot()
     result = {
         'state': 'unavailable',
         'installed': False,
         'running': False,
         'version': '',
         'update_available': False,
+        'transport_state': str(transport.get('state', 'off') or 'off')[:32],
+        'private_proxy_state': str(transport.get('private_proxy_state', 'off') or 'off')[:32],
+        'home_assistant_target_reachable': bool(transport.get('home_assistant_target_reachable', False)),
+        'handshake_age_seconds': transport.get('handshake_age_seconds'),
     }
     addons_result, addons_error = _supervisor_api_json('/addons', 'GET')
     if not addons_error:
@@ -1598,6 +1651,7 @@ def managed_backup_customer_summary():
 def external_access_customer_summary():
     """Sanitized read-only Managed External URL state for the vNext home screen."""
     connection = load_portal_connection()
+    portal_entitlement = _normalize_external_access_portal_state(connection.get('external_access_portal'))
     observation = external_access_gateway_observation_snapshot()
     tunnel = _external_access_tunnel_runtime_snapshot()
     tunnel_state = str(tunnel.get('state', 'off') or 'off')
@@ -1618,6 +1672,10 @@ def external_access_customer_summary():
         'observation_status': str(observation.get('status', '') or '')[:32],
         'hostname': hostname,
         'fresh': bool(observation.get('fresh', False)),
+        'entitlement_eligible': bool(portal_entitlement.get('eligible', False)),
+        'eligibility_source': str(portal_entitlement.get('eligibility_source', 'none') or 'none')[:32],
+        'package_eligible': bool(portal_entitlement.get('package_eligible', False)),
+        'standalone_entitlement': dict(portal_entitlement.get('standalone') or {}),
     }
 
 
@@ -3706,7 +3764,7 @@ def send_portal_heartbeat():
         response = portal_api_request('heartbeat', _portal_heartbeat_payload(), token=token)
         response = _portal_maybe_run_fresh_diagnostic_check(response, token)
         managed_changed = _portal_maybe_process_managed_backup(response)
-        _portal_maybe_process_external_access(response)
+        external_portal_state = _portal_maybe_process_external_access(response)
         control_changed = _portal_maybe_process_control_plane(response)
         if managed_changed or control_changed:
             # One immediate acknowledgement heartbeat publishes Managed Backup
@@ -3715,8 +3773,12 @@ def send_portal_heartbeat():
             # second local backup because Managed Backup job execution is idempotent.
             response = portal_api_request('heartbeat', _portal_heartbeat_payload(), token=token)
             _portal_maybe_process_managed_backup(response)
-            _portal_maybe_process_external_access(response)
+            refreshed_external_state = _portal_maybe_process_external_access(response)
+            if isinstance(refreshed_external_state, dict):
+                external_portal_state = refreshed_external_state
         connection['last_heartbeat'] = int(time.time())
+        if isinstance(external_portal_state, dict):
+            connection['external_access_portal'] = external_portal_state
         connection['last_error'] = ''
         if response.get('installation_id'):
             connection['installation_id'] = str(response['installation_id'])

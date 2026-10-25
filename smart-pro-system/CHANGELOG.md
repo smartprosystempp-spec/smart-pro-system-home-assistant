@@ -1,3 +1,13 @@
+## 3.0.3 — Standalone / Trial Semantics & Runtime Truth
+
+- Διορθώνει το customer mode ώστε Trial, paid subscription και standalone υπηρεσία να είναι διαφορετικές έννοιες.
+- Εμφανίζει «Δοκιμαστική εγκατάσταση» στο Trial και «Συνδρομητική εγκατάσταση» όταν υπάρχει πραγματικό Care/Advanced/Complete relationship.
+- Διαχωρίζει package inclusion από τρέχουσα service access κατάσταση για Managed Support.
+- Διαβάζει το πραγματικό Smart Pro Tunnel runtime-status contract και δεν ταυτίζει πλέον το running add-on process με ενεργό WireGuard tunnel.
+- Προσθέτει read-only Managed External URL entitlement/provisioning παρουσίαση από το Portal χωρίς να δίνει runtime authority στο UI.
+- Βελτιώνει Guardian/Smart Updates και local-backup customer wording χωρίς αλλαγή στα security gates.
+- Ολοκληρώνει τη version consistency του pre-built Smart Pro System 3.0.3.
+
 ## 3.0.1 — Unpaired State Semantics
 
 - Fixes the first-run/unpaired UI so it never describes the installation as connected or subscription-blocked before Portal pairing.
