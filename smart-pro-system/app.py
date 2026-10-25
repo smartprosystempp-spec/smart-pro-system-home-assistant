@@ -633,7 +633,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.6'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.7'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -2077,7 +2077,8 @@ def managed_backup_local_readiness_snapshot():
     state = load_managed_backup_agent_state()
     policy = state.get('policy') if isinstance(state.get('policy'), dict) else None
     options = load_addon_options()
-    ha_token_present = bool(str(options.get('ha_token', '') or '').strip())
+    configured_token = str(options.get('ha_token', '') or '').strip()
+    ha_credential_available = _ha_api_credential_available(configured_token)
     diagnostics = home_assistant_diagnostics_snapshot()
     backup_collection_status = str(diagnostics.get('backup_collection_status', '') or '')[:48]
     backup_api_readable = bool(diagnostics.get('backup_diagnostics_available', False)) and backup_collection_status == 'ready'
@@ -2102,7 +2103,7 @@ def managed_backup_local_readiness_snapshot():
         reason_code = 'policy_not_ready'
     elif not schedule_ready:
         reason_code = 'schedule_not_ready'
-    elif not ha_token_present:
+    elif not ha_credential_available:
         reason_code = 'ha_token_missing'
     elif not backup_api_readable:
         reason_code = 'backup_inventory_unavailable'
@@ -2118,7 +2119,9 @@ def managed_backup_local_readiness_snapshot():
         'control_plane_ready': control_plane_ready,
         'policy_ready': policy_ready,
         'schedule_ready': schedule_ready,
-        'ha_token_configured': ha_token_present,
+        # Legacy field name retained for Portal contract compatibility; True now
+        # means an HA API credential is available (scoped Supervisor or fallback).
+        'ha_token_configured': ha_credential_available,
         'backup_api_readable': backup_api_readable,
         'backup_collection_status': backup_collection_status or 'not_collected',
         'data_plane_authorized': False,
@@ -4400,6 +4403,17 @@ def send_email_alert(subject, body, tech_config, reply_to=''):
     print(f'[EMAIL ERROR] {message}', flush=True)
     return {'success': False, 'message': message, 'code': 'send_failed'}
 
+def _ha_api_credential_available(configured_token=''):
+    """Return True when the add-on can authenticate to Home Assistant Core.
+
+    Home Assistant OS/Supervised injects a container-scoped SUPERVISOR_TOKEN when
+    ``homeassistant_api: true`` is enabled. A manually configured long-lived token
+    remains only as a compatibility fallback for environments where the scoped
+    credential is unavailable.
+    """
+    return bool(str(os.getenv('SUPERVISOR_TOKEN', '') or '').strip() or str(configured_token or '').strip())
+
+
 def _ha_transport_profile(configured_token=''):
     """Return the safest available internal Home Assistant transport.
 
@@ -5366,12 +5380,13 @@ def _home_assistant_diagnostics_collect():
     """
     now = int(time.time())
     token = str(load_addon_options().get('ha_token', '') or '').strip()
+    credential_available = _ha_api_credential_available(token)
     base = {
         'contract': HA_DIAGNOSTICS_CONTRACT_ID,
         'monitored': False,
-        'configured': bool(token),
+        'configured': credential_available,
         'health_state': 'waiting',
-        'reason_code': 'missing_token' if not token else 'collecting',
+        'reason_code': 'missing_token' if not credential_available else 'collecting',
         'collected_at': now,
         'home_assistant_version': '',
         'core_state': '',
@@ -5455,14 +5470,14 @@ def _home_assistant_diagnostics_collect():
     access = subscription_service_access('backup_health')
     if not access.get('allowed'):
         base.update({
-            'configured': bool(token),
+            'configured': credential_available,
             'health_state': 'waiting',
             'reason_code': 'service_access_inactive',
             'service_access_reason': str(access.get('reason_code', '') or '')[:64],
         })
         return base
 
-    if not token:
+    if not credential_available:
         return base
 
     config, config_error = _ha_diagnostic_http_json(token, '/api/config')
@@ -5739,8 +5754,9 @@ def start_watchdog_test(test_options):
         raise ValueError('Η εγκατάσταση δεν είναι συνδεδεμένη με το Portal.')
 
     addon_options = load_addon_options()
-    if not str(addon_options.get('ha_token', '')).strip():
-        raise ValueError('Δεν έχει ρυθμιστεί Home Assistant token.')
+    configured_token = str(addon_options.get('ha_token', '') or '').strip()
+    if not _ha_api_credential_available(configured_token):
+        raise ValueError('Δεν υπάρχει διαθέσιμο Home Assistant API credential.')
 
     delay_sec = int(round(clamp_number(
         test_options.get('delay_seconds', tech_config.get('watchdog_test_delay_sec', 10)),
@@ -6147,8 +6163,9 @@ def smart_updates_loop():
             if not os.path.exists('/data/options.json'): continue
             with open('/data/options.json') as f: ha_config = json.load(f)
             token = ha_config.get('ha_token', '').strip()
-            if not token: continue
-            
+            if not _ha_api_credential_available(token):
+                continue
+
             states = get_ha_states(token)
             important_domains = get_monitored_domains(tech_config)
             known_updates = tech_config.get('known_updates', {})
@@ -6557,7 +6574,7 @@ def vacation_mode_loop():
                 continue
             options = load_addon_options()
             token = str(options.get('ha_token', '') or '').strip()
-            if not token:
+            if not _ha_api_credential_available(token):
                 continue
             now_ts = time.time()
             check_interval_sec = float(tech_config.get('check_interval_min', 5.0) or 5.0) * 60.0
@@ -6680,7 +6697,7 @@ def watchdog_loop():
 
             options = load_addon_options()
             token = str(options.get('ha_token', '') or '').strip()
-            if not token:
+            if not _ha_api_credential_available(token):
                 update_guardian_status(status='waiting', reason_code='missing_ha_token')
                 continue
 
@@ -6935,9 +6952,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             send_json(self, 200, tech_settings_public(load_tech_settings()))
         elif self.path.endswith('/api/entities'):
             try:
-                with open('/data/options.json') as f: ha_config = json.load(f)
-                token = ha_config.get('ha_token', '').strip()
-                states = get_ha_states(token)
+                states = get_ha_states_for_ui()
                 valid_ents = []
                 for st in states:
                     eid = st.get('entity_id', '')

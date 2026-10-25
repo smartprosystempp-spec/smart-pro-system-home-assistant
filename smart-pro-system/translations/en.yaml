@@ -1,7 +1,7 @@
 configuration:
   ha_token:
-    name: "Home Assistant Token"
-    description: "Κρυφό Long-Lived Access Token για τους τοπικούς ελέγχους του Smart Pro System."
+    name: "Home Assistant Token (fallback)"
+    description: "Προαιρετικό Long-Lived Access Token μόνο για συμβατότητα όταν δεν είναι διαθέσιμο το ασφαλές scoped credential του Home Assistant OS/Supervisor."
   mesh_access_token:
     name: "MeshCentral Access Token"
     description: "Κρυφό token για τον ασφαλή έλεγχο κατάστασης απομακρυσμένης συνεδρίας."

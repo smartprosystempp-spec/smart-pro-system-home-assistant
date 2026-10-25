@@ -1,3 +1,11 @@
+## 3.0.7 — HA Scoped Credential Unification
+
+- Uses the Home Assistant OS/Supervisor-scoped `SUPERVISOR_TOKEN` as the default Core API credential when available.
+- Keeps the manually configured Home Assistant long-lived token only as a compatibility fallback.
+- Removes legacy manual-token gates from Guardian, Home Assistant Diagnostics, Managed Backup local readiness, Watchdog safe test, Smart Updates, Vacation Mode and entity loading.
+- Keeps `homeassistant_api: true`, Portal pairing, subscription semantics, Managed Support, Smart Pro Tunnel and External URL runtime authority unchanged.
+- Preserves the existing Managed Backup heartbeat field name `ha_token_configured` for contract compatibility; its boolean now represents effective HA API credential availability.
+
 ## 3.0.6 — External URL Persisted State Idempotency Fix
 
 - Makes the Managed External URL Portal-state normalizer idempotent across raw heartbeat and already-normalized persisted shapes.
