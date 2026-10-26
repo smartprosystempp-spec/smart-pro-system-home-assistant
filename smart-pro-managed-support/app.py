@@ -127,7 +127,8 @@ FIRST_DEVICE_MESH_HINT_RE = re.compile(r"^[a-f0-9]{16}$")
 FIRST_DEVICE_INSTALLATION = "ID-34973"
 FIRST_DEVICE_GROUP = "Smart Pro Managed — ID-34973"
 FIRST_DEVICE_EXECUTION_VERSION = "3.17.4"
-CONTINUOUS_LIFECYCLE_VERSION = "3.19.1"
+# Stable releases retain the Start/Pause-only boundary; maintenance checkpoints stay separate.
+CONTINUOUS_LIFECYCLE_VERSIONS = ("3.19.1", "3.19.2")
 FIRST_DEVICE_EXECUTION_MAX_RUNTIME = 75
 FIRST_DEVICE_EXECUTION_SHUTDOWN_GRACE = 3
 MIN_AGENT_BYTES = 100000
@@ -5516,7 +5517,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 
     pair_html = ""
     if identity is None:
-        activation_locked = VERSION == CONTINUOUS_LIFECYCLE_VERSION
+        activation_locked = VERSION in CONTINUOUS_LIFECYCLE_VERSIONS
         disabled = "" if (local_allowed and not activation_locked) else " disabled"
         activation_note = (
             '<div class="tool-lock">3.19.0: η παλιά τεχνική pairing φόρμα παραμένει ορατή μόνο ως αναφορά και είναι κλειδωμένη. '
@@ -6808,7 +6809,7 @@ class Handler(BaseHTTPRequestHandler):
         if VERSION == FIRST_DEVICE_EXECUTION_VERSION and not (is_first_device_execution or is_first_device_retry_reset):
             self._send(409, render_page(read_policy(), "Η 3.17.4 είναι κλειδωμένο controlled retry/reset checkpoint. Επιτρέπονται μόνο reset consume και αργότερα explicit armed first-device execution.", "bad"), "text/html; charset=utf-8")
             return
-        if VERSION == CONTINUOUS_LIFECYCLE_VERSION and not (is_persistent_start or is_persistent_stop):
+        if VERSION in CONTINUOUS_LIFECYCLE_VERSIONS and not (is_persistent_start or is_persistent_stop):
             self._send(409, render_page(read_policy(), "Η 3.19.0 είναι stable multi-architecture checkpoint. Επιτρέπονται μόνο explicit unattended start/stop. Τα παλιά mutation/test actions παραμένουν αρχειοθετημένα και δεν επαναλαμβάνονται.", "bad"), "text/html; charset=utf-8")
             return
         if PERSISTENT_WORKER_ACTIVE and not (is_persistent_stop or is_group_migration_preflight or is_group_migration_target_settings or is_group_migration_canary or is_group_identity_reseed_canary or is_candidate_reconnect_canary or is_candidate_promotion):
@@ -7068,7 +7069,7 @@ if __name__ == "__main__":
     if VERSION != FIRST_DEVICE_EXECUTION_VERSION:
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
-        if VERSION == CONTINUOUS_LIFECYCLE_VERSION:
+        if VERSION in CONTINUOUS_LIFECYCLE_VERSIONS:
             print("[managed] 3.19.0 multi-architecture compatibility: unattended supervisor available; explicit start/stop only; stable identity reuse required; archived actions locked; technician_actions=false", flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
