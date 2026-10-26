@@ -77,7 +77,7 @@ CONTROL_PLANE_CLOCK_SKEW_SECONDS = 30
 MANAGED_BACKUP_AGENT_CONTRACT_ID = 'smart-pro-managed-backup-agent-v1'
 MANAGED_BACKUP_AGENT_STATE_FILE = Path('/data/managed_backup_agent.json')
 MANAGED_BACKUP_AGENT_LOCK = threading.RLock()
-MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload')
+MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload')
 MANAGED_BACKUP_AGENT_RUNTIME_KEYS = (
     'backup_jobs_authorized',
     'backup_io_authorized',
@@ -647,7 +647,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.12'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.13'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -2186,7 +2186,12 @@ def _managed_backup_storage_credentials_snapshot():
 
 
 def _managed_backup_storage_handoff_snapshot():
-    """Re-verify the local backup as the source for the configured primary target."""
+    """Re-verify the local backup source without requiring provider credentials on-device.
+
+    3.0.13 changes only the readiness contract: the source can be declared ready for a
+    future Portal-issued presigned transfer while provider credentials remain absent from
+    Smart Pro System. No upload grant or storage authority is created here.
+    """
     state = load_managed_backup_agent_state()
     job = state.get('local_job') if isinstance(state.get('local_job'), dict) else None
     target = state.get('storage_target') if isinstance(state.get('storage_target'), dict) else None
@@ -2194,7 +2199,7 @@ def _managed_backup_storage_handoff_snapshot():
     creds = _managed_backup_storage_credentials_snapshot()
     now = int(time.time())
     base = {
-        'contract': 'smart-pro-managed-backup-storage-handoff-v1',
+        'contract': 'smart-pro-managed-backup-storage-handoff-v2',
         'state': 'blocked',
         'reason_code': 'local_job_missing',
         'job_id': '',
@@ -2202,6 +2207,8 @@ def _managed_backup_storage_handoff_snapshot():
         'backup_ref_digest': '',
         'backup_type': '',
         'destination_state': target_state if target_state else 'not_received',
+        'transport_mode': 'portal_presigned',
+        'credential_mode': 'portal_vault',
         'upload_grant_present': False,
         'upload_authorized': False,
         'storage_authorized': False,
@@ -2226,9 +2233,6 @@ def _managed_backup_storage_handoff_snapshot():
     if target_state != 'provider_configured' or not isinstance(target, dict):
         base['reason_code'] = 'storage_target_not_configured'
         return base
-    if not bool(creds.get('configured')):
-        base['reason_code'] = 'provider_credentials_missing'
-        return base
     if bool(state.get('runtime_authority_present', False)):
         base['reason_code'] = 'unexpected_runtime_authority'
         return base
@@ -2242,7 +2246,7 @@ def _managed_backup_storage_handoff_snapshot():
     if verify_type:
         base['backup_type'] = verify_type[:24]
     base['state'] = 'ready'
-    base['reason_code'] = 'ready'
+    base['reason_code'] = 'source_ready'
     base['source_verified'] = True
     return base
 

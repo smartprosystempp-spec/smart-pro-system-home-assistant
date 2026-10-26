@@ -74,3 +74,12 @@ replace an already bound node. Hardware replacement remains a future controlled 
 
 ## 2.4.55 sequential daily-cycle rule
 A new local Managed Backup job ID may replace the previous local job only after the previous job is terminal. If the previous job is local_verified, its matching primary upload must already be primary_verified. This opens sequential daily cycles without granting persistent scheduler authority to Smart Pro Tools.
+
+
+## 3.0.13 — Presigned source handoff foundation
+- Capability: `primary_presigned_upload`.
+- Storage handoff contract v2 reports `transport_mode=portal_presigned` and `credential_mode=portal_vault`.
+- A ready handoff proves only that the exact local backup source is still present and verified.
+- Provider credentials are not required on-device.
+- `upload_grant_present`, `upload_authorized`, `storage_authorized`, and `replication_authorized` remain false.
+- No presigned URL is accepted or executed until a separate milestone.

@@ -1,6 +1,8 @@
-# Smart Pro System 3.0.12
+# Smart Pro System 3.0.13
 
 Το Smart Pro System είναι ο τοπικός κόμβος της εγκατάστασης Home Assistant για σύνδεση με το Smart Pro Portal, κατάσταση υπηρεσιών, Guardian, Managed Backup, Managed External URL και ελεγχόμενη τεχνική υποστήριξη.
+
+Η 3.0.13 προσθέτει μόνο το **Managed Backup presigned source-handoff foundation**: επαληθεύει ότι το local backup παραμένει διαθέσιμο για μελλοντική Portal-issued μεταφορά χωρίς να απαιτεί OVH/S3 credentials μέσα στη συσκευή. Δεν εκτελεί presigned URL ούτε S3 write.
 
 Η 3.0.12 επαναφέρει την κανονική **automatic Smart Pro Tunnel replacement recovery** μετά το ολοκληρωμένο 3.0.11 diagnostic checkpoint. Αφαιρεί μόνο το προσωρινό Store diagnostic endpoint και το diagnostic scheduler pause, ενώ διατηρεί αυτούσια τα live-proven Store matching fixes των 3.0.9–3.0.10 και όλο το υπάρχον signed Control Plane / Portal behavior. Το εμφανιζόμενο όνομα είναι **Smart Pro System**, ενώ το εσωτερικό slug παραμένει `smart_pro_tools` για τεχνική συνέχεια.
 

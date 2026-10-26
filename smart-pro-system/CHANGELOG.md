@@ -1,3 +1,8 @@
+## 3.0.13 — Managed Backup Presigned Source Handoff Foundation v1
+- Managed Backup storage handoff v2 verifies the existing local backup source without requiring OVH/S3 credentials in Smart Pro System.
+- Adds capability `primary_presigned_upload`; no presigned URL execution or S3 write is enabled in this release.
+- Legacy local-credential upload implementation remains present but receives no new authority from this release.
+
 ## 3.0.12 — Tunnel Recovery Diagnostic Cleanup
 
 - Removes the temporary read-only `/api/tunnel_store_diagnostic` endpoint introduced only for 3.0.11 QA.
