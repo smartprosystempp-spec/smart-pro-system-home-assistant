@@ -1,3 +1,12 @@
+## 3.0.14 — Managed Backup Controlled Presigned Primary Upload v1
+- Adds exact-bound short-lived presigned PUT/HEAD/GET executor for one verified local backup.
+- Adds capability `primary_presigned_upload_execute`.
+- Validates installation/node/policy/job/object/TTL and Control Plane HMAC before network I/O.
+- Upload uses Content-MD5, signed Object Lock GOVERNANCE headers and If-None-Match `*`.
+- Performs HEAD retention verification and full GET read-back SHA-256 verification.
+- Raw OVH credentials are never received or stored on-device.
+- Replication/delete/restore remain OFF.
+
 ## 3.0.13 — Managed Backup Presigned Source Handoff Foundation v1
 - Managed Backup storage handoff v2 verifies the existing local backup source without requiring OVH/S3 credentials in Smart Pro System.
 - Adds capability `primary_presigned_upload`; no presigned URL execution or S3 write is enabled in this release.

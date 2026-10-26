@@ -1,10 +1,12 @@
 import http.server
+import http.client
 import socketserver
 import socket
 import struct
 import json
 import smtplib
 from email.message import EmailMessage
+from email.utils import parsedate_to_datetime
 import ssl
 import threading
 import time
@@ -77,7 +79,7 @@ CONTROL_PLANE_CLOCK_SKEW_SECONDS = 30
 MANAGED_BACKUP_AGENT_CONTRACT_ID = 'smart-pro-managed-backup-agent-v1'
 MANAGED_BACKUP_AGENT_STATE_FILE = Path('/data/managed_backup_agent.json')
 MANAGED_BACKUP_AGENT_LOCK = threading.RLock()
-MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload')
+MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload', 'primary_presigned_upload_execute')
 MANAGED_BACKUP_AGENT_RUNTIME_KEYS = (
     'backup_jobs_authorized',
     'backup_io_authorized',
@@ -647,7 +649,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.13'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.14'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -2418,6 +2420,233 @@ def _managed_backup_s3_failure_code(error, stage='s3'):
     op = _safe(operation) or _safe(stage) or 's3'
     return f's3_{code}_{op}'[:96]
 
+
+def _managed_backup_presigned_url_parts(url, bucket, object_key, expected_signed_headers):
+    try:
+        parsed = urllib.parse.urlsplit(str(url or ''))
+    except Exception:
+        return None
+    if parsed.scheme != 'https' or (parsed.hostname or '').lower() != 's3.eu-south-mil.io.cloud.ovh.net' or parsed.port not in (None, 443):
+        return None
+    expected_path = '/' + urllib.parse.quote(str(bucket), safe='') + '/' + '/'.join(
+        urllib.parse.quote(part, safe='') for part in str(object_key).split('/')
+    )
+    if parsed.path != expected_path or not parsed.query:
+        return None
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True)
+    required = ('X-Amz-Algorithm','X-Amz-Credential','X-Amz-Date','X-Amz-Expires','X-Amz-SignedHeaders','X-Amz-Signature')
+    if any(len(query.get(key, [])) != 1 for key in required):
+        return None
+    if query['X-Amz-Algorithm'][0] != 'AWS4-HMAC-SHA256':
+        return None
+    if query['X-Amz-SignedHeaders'][0] != expected_signed_headers:
+        return None
+    try:
+        expires = int(query['X-Amz-Expires'][0])
+        issued = int(datetime.strptime(query['X-Amz-Date'][0], '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc).timestamp())
+    except Exception:
+        return None
+    if expires < 30 or expires > 120 or issued <= 0:
+        return None
+    return {'host': parsed.hostname, 'target': parsed.path + '?' + parsed.query, 'issued_at': issued, 'expires_at': issued + expires}
+
+
+def _managed_backup_parse_s3_time(value):
+    raw = str(value or '').strip()
+    if not raw:
+        return 0
+    try:
+        dt = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        try:
+            dt = parsedate_to_datetime(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        except Exception:
+            return 0
+
+
+def _managed_backup_file_md5_b64(path):
+    try:
+        digest = hashlib.md5(usedforsecurity=False)
+    except TypeError:
+        digest = hashlib.md5()
+    with open(path, 'rb') as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return base64.b64encode(digest.digest()).decode('ascii')
+
+
+def _managed_backup_execute_presigned_primary_upload(job):
+    if not isinstance(job, dict):
+        return False
+    required = {
+        'contract','job_id','action','installation_id','node_id','policy_hash','backup_ref_digest','object_key',
+        'retention_days','retain_until','provider_id','endpoint','region','bucket','object_lock_mode','transport_mode',
+        'put_url','head_url','get_url','put_headers','nonce','issued_at','expires_at','upload_authorized',
+        'storage_authorized','replication_authorized','restore_point_authorized','signature',
+    }
+    if set(job.keys()) != required or str(job.get('contract') or '') != 'smart-pro-managed-backup-presigned-upload-job-v1':
+        return False
+    if str(job.get('action') or '') != 'upload_verified_backup_presigned' or str(job.get('transport_mode') or '') != 'portal_presigned':
+        return False
+    installation_id = str(paired_installation_id() or '').strip().upper()
+    state = load_managed_backup_agent_state()
+    node_id = str(state.get('node_id', '') or '').strip().lower()
+    if str(job.get('installation_id') or '').strip().upper() != installation_id or str(job.get('node_id') or '').strip().lower() != node_id:
+        return False
+    job_id = str(job.get('job_id') or '').strip().lower()
+    nonce = str(job.get('nonce') or '').strip().lower()
+    if not re.fullmatch(r'mbj_[0-9a-f]{32}', job_id) or not re.fullmatch(r'[0-9a-f]{32}', nonce):
+        return False
+    try:
+        issued_at = int(job.get('issued_at', 0) or 0); expires_at = int(job.get('expires_at', 0) or 0)
+        retention_days = int(job.get('retention_days', 0) or 0); retain_until = int(job.get('retain_until', 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    now = int(time.time())
+    if issued_at <= 0 or expires_at <= issued_at or expires_at - issued_at > 120 or now < issued_at - 30 or now > expires_at + 30:
+        return False
+    if retention_days not in range(1, 367) or abs(retain_until - (issued_at + retention_days * 86400)) > 5 or retain_until <= now:
+        return False
+    local_job = state.get('local_job') if isinstance(state.get('local_job'), dict) else None
+    if not local_job or str(local_job.get('job_id') or '').strip().lower() != job_id or str(local_job.get('state') or '') != 'local_verified' or not bool(local_job.get('verified', False)):
+        return False
+    local_digest = str(local_job.get('backup_ref_digest') or '').strip().lower()
+    if not re.fullmatch(r'[0-9a-f]{64}', local_digest) or not hmac.compare_digest(local_digest, str(job.get('backup_ref_digest') or '').strip().lower()):
+        return False
+    policy = state.get('policy') if isinstance(state.get('policy'), dict) else None
+    if not policy or str(policy.get('policy_hash') or '').strip().lower() != str(job.get('policy_hash') or '').strip().lower() or retention_days != int(policy.get('retention_days', 0) or 0):
+        return False
+    target = state.get('storage_target') if isinstance(state.get('storage_target'), dict) else None
+    if not target or str(target.get('state') or '') != 'provider_configured':
+        return False
+    for key in ('provider_id','endpoint','region','bucket','object_lock_mode'):
+        if str(job.get(key) or '').lower() != str(target.get(key) or '').lower():
+            return False
+    if not bool(job.get('upload_authorized')) or not bool(job.get('storage_authorized')) or bool(job.get('replication_authorized')) or not bool(job.get('restore_point_authorized')):
+        return False
+    object_key = str(job.get('object_key') or '').strip()
+    if not re.fullmatch(r'managed-backup-presigned/[0-9a-f]{24}/mbj_[0-9a-f]{32}\.tar', object_key):
+        return False
+    put_headers = job.get('put_headers') if isinstance(job.get('put_headers'), dict) else None
+    expected_retain_header = datetime.fromtimestamp(retain_until, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    expected_put_headers = {
+        'if-none-match': '*',
+        'x-amz-object-lock-mode': 'GOVERNANCE',
+        'x-amz-object-lock-retain-until-date': expected_retain_header,
+    }
+    if put_headers != expected_put_headers:
+        return False
+    put_parts = _managed_backup_presigned_url_parts(job.get('put_url'), str(target['bucket']), object_key, 'host;if-none-match;x-amz-object-lock-mode;x-amz-object-lock-retain-until-date')
+    head_parts = _managed_backup_presigned_url_parts(job.get('head_url'), str(target['bucket']), object_key, 'host')
+    get_parts = _managed_backup_presigned_url_parts(job.get('get_url'), str(target['bucket']), object_key, 'host')
+    if not put_parts or not head_parts or not get_parts:
+        return False
+    if any(parts['expires_at'] > expires_at + 5 or parts['issued_at'] < issued_at - 5 for parts in (put_parts, head_parts, get_parts)):
+        return False
+    secret = _managed_backup_agent_control_secret()
+    signature = str(job.get('signature') or '').strip().lower()
+    expected = _managed_backup_job_signature(job, secret)
+    if not expected or not hmac.compare_digest(expected, signature):
+        return False
+    existing = state.get('primary_upload') if isinstance(state.get('primary_upload'), dict) else None
+    if existing and str(existing.get('job_id') or '').strip().lower() == job_id:
+        if str(existing.get('state') or '').strip().lower() in ('uploading','primary_verified'):
+            return False
+        if str(existing.get('nonce') or '').strip().lower() == nonce:
+            return False
+
+    result = {
+        'job_id': job_id, 'nonce': nonce, 'state': 'uploading', 'result_code': 'uploading', 'verified': False,
+        'executed_at': 0, 'provider_id': str(job.get('provider_id') or ''), 'bucket': str(job.get('bucket') or ''),
+        'object_key': object_key, 'object_version_id': '', 'object_sha256': '', 'object_size': 0,
+        'object_lock_mode': 'governance', 'retain_until': retain_until, 'readback_verified': False,
+    }
+    state['primary_upload'] = result; state['updated_at'] = now; save_managed_backup_agent_state(state)
+    transfer_dir = Path('/data/managed_backup_transfer')
+    transfer_dir.mkdir(parents=True, exist_ok=True); os.chmod(transfer_dir, 0o700)
+    temp_path = transfer_dir / f'{job_id}.tar'
+    stage = 'download'
+    try:
+        download, error = _managed_backup_supervisor_download(str(local_job.get('backup_slug') or ''), temp_path)
+        if error or not isinstance(download, dict):
+            raise RuntimeError(error or 'backup_download_failed')
+        content_md5 = _managed_backup_file_md5_b64(temp_path)
+        stage = 'presigned_put'
+        conn = http.client.HTTPSConnection(put_parts['host'], 443, timeout=180, context=ssl.create_default_context())
+        try:
+            with open(temp_path, 'rb') as body:
+                headers = dict(expected_put_headers)
+                headers.update({'Content-Length': str(int(download['size'])), 'Content-MD5': content_md5, 'Connection': 'close'})
+                conn.request('PUT', put_parts['target'], body=body, headers=headers)
+                response = conn.getresponse(); response.read(65536)
+                if int(response.status) not in (200, 201):
+                    raise RuntimeError(f'presigned_put_http_{int(response.status)}')
+        finally:
+            conn.close()
+        stage = 'presigned_head'
+        conn = http.client.HTTPSConnection(head_parts['host'], 443, timeout=60, context=ssl.create_default_context())
+        try:
+            conn.request('HEAD', head_parts['target'], headers={'Connection':'close'})
+            response = conn.getresponse(); response.read()
+            if int(response.status) != 200:
+                raise RuntimeError(f'presigned_head_http_{int(response.status)}')
+            head_size = int(response.getheader('Content-Length') or -1)
+            version_id = str(response.getheader('x-amz-version-id') or '')
+            lock_mode = str(response.getheader('x-amz-object-lock-mode') or '').upper()
+            retain_header = str(response.getheader('x-amz-object-lock-retain-until-date') or '')
+        finally:
+            conn.close()
+        if head_size != int(download['size']):
+            raise RuntimeError('object_size_mismatch')
+        if lock_mode != 'GOVERNANCE':
+            raise RuntimeError('object_lock_mode_mismatch')
+        retain_epoch = _managed_backup_parse_s3_time(retain_header)
+        if retain_epoch <= 0 or abs(retain_epoch - retain_until) > 300:
+            raise RuntimeError('object_lock_retention_mismatch')
+        stage = 'presigned_get'
+        conn = http.client.HTTPSConnection(get_parts['host'], 443, timeout=180, context=ssl.create_default_context())
+        try:
+            conn.request('GET', get_parts['target'], headers={'Connection':'close'})
+            response = conn.getresponse()
+            if int(response.status) != 200:
+                response.read(65536)
+                raise RuntimeError(f'presigned_get_http_{int(response.status)}')
+            verify_hash = hashlib.sha256(); verify_size = 0
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                verify_size += len(chunk); verify_hash.update(chunk)
+        finally:
+            conn.close()
+        if verify_size != int(download['size']) or verify_hash.hexdigest() != str(download['sha256']):
+            raise RuntimeError('object_readback_hash_mismatch')
+        result.update({
+            'state':'primary_verified','result_code':'primary_object_verified','verified':True,'executed_at':int(time.time()),
+            'object_version_id':version_id,'object_sha256':str(download['sha256']),'object_size':int(download['size']),
+            'object_lock_mode':'governance','retain_until':retain_epoch,'readback_verified':True,
+        })
+    except Exception as error:
+        result.update({'state':'failed','result_code':_managed_backup_s3_failure_code(error, stage),'executed_at':int(time.time())})
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+    state = load_managed_backup_agent_state(); state['primary_upload'] = result; state['updated_at'] = int(time.time()); save_managed_backup_agent_state(state)
+    print(f"[BACKUP] Managed Backup presigned primary upload {job_id} -> {result['state']} / {result['result_code']}", flush=True)
+    return True
+
+
 def _managed_backup_execute_primary_upload(job):
     if not isinstance(job, dict):
         return False
@@ -2876,7 +3105,10 @@ def _portal_maybe_process_managed_backup(response):
     upload_changed = False
     if isinstance(managed.get('upload_job'), dict):
         upload_changed = _managed_backup_execute_primary_upload(managed.get('upload_job'))
-    return changed or job_changed or upload_changed
+    presigned_upload_changed = False
+    if isinstance(managed.get('presigned_upload_job'), dict):
+        presigned_upload_changed = _managed_backup_execute_presigned_primary_upload(managed.get('presigned_upload_job'))
+    return changed or job_changed or upload_changed or presigned_upload_changed
 
 
 def managed_backup_agent_public_snapshot():

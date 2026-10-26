@@ -1,4 +1,10 @@
-# Smart Pro System 3.0.13
+# Smart Pro System 3.0.14
+
+## Managed Backup Controlled Presigned Primary Upload v1
+
+Η 3.0.14 προσθέτει τον ελεγχόμενο executor για Portal-issued short-lived presigned primary upload. Τα OVH/S3 Access/Secret keys παραμένουν εκτός συσκευής. Το Smart Pro System δέχεται μόνο signed job για το ήδη verified local backup, ακριβές bucket/object, TTL έως 120s, Object Lock GOVERNANCE και full read-back SHA-256.
+
+Safety: no provider credential delivery, no replication, no delete, no restore execution, no persistent storage authority. Legacy local-credential upload code παραμένει μόνο για backward compatibility και δεν χρησιμοποιείται όταν το handoff mode είναι `portal_presigned`.
 
 Το Smart Pro System είναι ο τοπικός κόμβος της εγκατάστασης Home Assistant για σύνδεση με το Smart Pro Portal, κατάσταση υπηρεσιών, Guardian, Managed Backup, Managed External URL και ελεγχόμενη τεχνική υποστήριξη.
 
