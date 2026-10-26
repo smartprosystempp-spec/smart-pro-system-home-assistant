@@ -1,3 +1,11 @@
+## 3.0.12 — Tunnel Recovery Diagnostic Cleanup
+
+- Removes the temporary read-only `/api/tunnel_store_diagnostic` endpoint introduced only for 3.0.11 QA.
+- Removes the diagnostic scheduler pause and restores normal automatic Smart Pro Tunnel companion recovery.
+- Preserves the live-proven Supervisor Store repository-slug/source matching and `version_latest` handling from 3.0.9–3.0.10.
+- Keeps Portal pairing, subscription, Guardian, Smart Pro Tunnel 0.1.7, Managed Support, Managed Backup and signed Control Plane behavior unchanged.
+- Does not alter the persisted recovery history semantics; runtime `connected/listening/reachable` remains authoritative for current Tunnel health.
+
 ## 3.0.11 — Tunnel Store Live Contract Diagnostic
 
 - Adds one bounded read-only `/api/tunnel_store_diagnostic` endpoint for replacement QA.

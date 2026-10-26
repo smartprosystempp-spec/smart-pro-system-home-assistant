@@ -137,10 +137,6 @@ SMART_PRO_TUNNEL_RECOVERY_WORKER_LOCK = threading.Lock()
 SMART_PRO_TUNNEL_RECOVERY_BACKOFF_SECONDS = 15 * 60
 SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL = 'https://github.com/smartprosystempp-spec/smart-pro-system-home-assistant'
 SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION = (0, 1, 7)
-# 3.0.11 is an intentionally read-only diagnostic checkpoint. Automatic
-# companion recovery is paused so the live Supervisor Store contract can be
-# observed without any install/start mutation while QA isolates the matcher.
-SMART_PRO_TUNNEL_RECOVERY_DIAGNOSTIC_ONLY = True
 
 
 def _external_access_gateway_observation_default():
@@ -651,7 +647,7 @@ SMART_UPDATES_TEST_SCENARIOS = {
 }
 
 PORTAL_CONNECTION_FILE = Path('/data/portal_connection.json')
-ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.11'
+ADDON_VERSION = os.getenv('ADDON_VERSION') or '3.0.12'
 PORTAL_HEARTBEAT_DEFAULT = 30
 PORTAL_STATE_LOCK = threading.Lock()
 
@@ -4689,118 +4685,6 @@ def _smart_pro_tunnel_store_match():
     return matches[0], ''
 
 
-def smart_pro_tunnel_store_diagnostic():
-    """Return a bounded, credential-free view of Tunnel Store discovery.
-
-    This endpoint is intentionally read-only and exists only to diagnose the
-    Supervisor Store contract seen by replacement-device QA. It exposes no
-    Supervisor token, add-on options, private keys or unrelated app metadata.
-    """
-    expected_repository = _smart_pro_tunnel_repository_source(SMART_PRO_TUNNEL_OFFICIAL_REPOSITORY_URL)
-    expected_slug = 'smart_pro_tunnel'
-    expected_name = 'Smart Pro Tunnel'
-    result = {
-        'contract': 'smart-pro-tunnel-store-diagnostic-v1',
-        'read_only': True,
-        'recovery_paused_for_diagnostic': bool(SMART_PRO_TUNNEL_RECOVERY_DIAGNOSTIC_ONLY),
-        'expected': {
-            'name': expected_name,
-            'slug': expected_slug,
-            'repository_source': expected_repository,
-            'minimum_version': '.'.join(str(x) for x in SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION),
-        },
-        'store_error': '',
-        'addons_count': 0,
-        'repositories_count': 0,
-        'official_repository_candidates': [],
-        'tunnel_candidates': [],
-        'smart_pro_store_items': [],
-        'matcher': {'matched': False, 'reason_code': 'not_evaluated', 'slug': '', 'version': ''},
-    }
-    store, error = _supervisor_api_json('/store', 'GET', timeout=20)
-    if error:
-        result['store_error'] = str(error)[:64]
-        result['matcher']['reason_code'] = 'store_' + str(error)[:48]
-        return result
-    if not isinstance(store, dict):
-        result['store_error'] = 'store_invalid'
-        result['matcher']['reason_code'] = 'store_invalid'
-        return result
-
-    items = store.get('addons') if isinstance(store.get('addons'), list) else []
-    repositories = store.get('repositories') if isinstance(store.get('repositories'), list) else []
-    result['addons_count'] = len(items)
-    result['repositories_count'] = len(repositories)
-
-    repository_map = {}
-    for repo in repositories:
-        if not isinstance(repo, dict):
-            continue
-        repo_slug = str(repo.get('slug', '') or '').strip().lower()
-        source = _smart_pro_tunnel_repository_source(repo.get('source'))
-        url = _smart_pro_tunnel_repository_source(repo.get('url'))
-        if repo_slug:
-            repository_map[repo_slug] = {'source': source, 'url': url, 'name': str(repo.get('name', '') or '')[:120]}
-        if source == expected_repository or url == expected_repository:
-            result['official_repository_candidates'].append({
-                'slug': repo_slug,
-                'name': str(repo.get('name', '') or '')[:120],
-                'source': source,
-                'url': url,
-                'source_match': source == expected_repository,
-                'url_match': url == expected_repository,
-            })
-
-    def candidate_view(item):
-        slug = str(item.get('slug', '') or '').strip().lower()
-        name = str(item.get('name', '') or '').strip()
-        repo_slug = str(item.get('repository', '') or '').strip().lower()
-        repo = repository_map.get(repo_slug, {})
-        source = str(repo.get('source', '') or '')
-        latest = str(item.get('version_latest') or item.get('version') or '').strip()
-        return {
-            'name': name[:120],
-            'slug': slug[:128],
-            'repository_slug': repo_slug[:64],
-            'repository_source': source[:300],
-            'repository_known': bool(repo),
-            'repository_source_match': source == expected_repository,
-            'version': str(item.get('version', '') or '')[:32],
-            'version_latest': str(item.get('version_latest', '') or '')[:32],
-            'effective_version': latest[:32],
-            'version_ok': _smart_pro_tunnel_version_tuple(latest) >= SMART_PRO_TUNNEL_MIN_RECOVERY_VERSION,
-            'stage': str(item.get('stage', '') or '')[:32],
-            'available': bool(item.get('available', False)),
-            'installed': bool(item.get('installed', False)),
-            'name_match': name == expected_name,
-            'slug_match': slug == expected_slug or slug.endswith('_' + expected_slug),
-        }
-
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        slug = str(item.get('slug', '') or '').strip().lower()
-        name = str(item.get('name', '') or '').strip()
-        if 'smart_pro' in slug or 'smart pro' in name.lower():
-            if len(result['smart_pro_store_items']) < 20:
-                result['smart_pro_store_items'].append(candidate_view(item))
-        if 'smart_pro_tunnel' in slug or name.lower() == 'smart pro tunnel':
-            if len(result['tunnel_candidates']) < 10:
-                result['tunnel_candidates'].append(candidate_view(item))
-
-    matched, match_error = _smart_pro_tunnel_store_match()
-    if isinstance(matched, dict) and not match_error:
-        result['matcher'] = {
-            'matched': True,
-            'reason_code': 'matched',
-            'slug': str(matched.get('slug', '') or '')[:128],
-            'version': str(matched.get('version_latest') or matched.get('version') or '')[:32],
-        }
-    else:
-        result['matcher']['reason_code'] = str(match_error or 'store_match_missing')[:64]
-    return result
-
-
 def _smart_pro_tunnel_recovery_worker(installation_id):
     attempt_at = int(time.time())
     state = load_smart_pro_tunnel_recovery_state()
@@ -4930,9 +4814,6 @@ def _schedule_smart_pro_tunnel_recovery(connection, external_portal_state):
 
     subscription = portal_subscription_public(connection)
     if not bool(subscription.get('verification_valid', False)):
-        return False
-
-    if SMART_PRO_TUNNEL_RECOVERY_DIAGNOSTIC_ONLY:
         return False
 
     runtime = smart_pro_tunnel_runtime_public_status()
@@ -7378,9 +7259,6 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 send_json(self, 200, {'status': 'ok', 'states': get_ha_states_for_ui()})
             except RuntimeError as error:
                 send_json(self, 502, {'status': 'error', 'message': str(error)})
-
-        elif request_path.endswith('/api/tunnel_store_diagnostic'):
-            send_json(self, 200, smart_pro_tunnel_store_diagnostic())
 
         elif urllib.parse.urlparse(self.path).path.endswith('/api/portal_status'):
             send_json(self, 200, portal_public_status())
