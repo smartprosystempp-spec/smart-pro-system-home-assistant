@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import random
 import recovery_verifier
+import recovery_stage
 import secrets
 import ipaddress
 import math
@@ -80,7 +81,7 @@ CONTROL_PLANE_CLOCK_SKEW_SECONDS = 30
 MANAGED_BACKUP_AGENT_CONTRACT_ID = 'smart-pro-managed-backup-agent-v1'
 MANAGED_BACKUP_AGENT_STATE_FILE = Path('/data/managed_backup_agent.json')
 MANAGED_BACKUP_AGENT_LOCK = threading.RLock()
-MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload', 'primary_presigned_upload_execute', 'recovery_download_sha256')
+MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload', 'primary_presigned_upload_execute', 'recovery_download_sha256', 'recovery_supervisor_stage')
 MANAGED_BACKUP_AGENT_RUNTIME_KEYS = (
     'backup_jobs_authorized',
     'backup_io_authorized',
@@ -3013,6 +3014,7 @@ def managed_backup_agent_heartbeat_snapshot():
         'storage_credentials': _managed_backup_storage_credentials_snapshot(),
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
         'recovery_download_result': recovery_verifier.public_result(),
+        'supervisor_stage_result': recovery_stage.public_result(),
         'reported_at': int(time.time()),
     }
 
@@ -3117,7 +3119,14 @@ def _portal_maybe_process_managed_backup(response):
             'node_id':str(state.get('node_id') or ''),
             'secret':_managed_backup_agent_control_secret(),
         })
-    return changed or job_changed or upload_changed or presigned_upload_changed or recovery_started
+    stage_started=False
+    if isinstance(managed.get('supervisor_stage_job'),dict):
+        stage_started=recovery_stage.maybe_start(managed['supervisor_stage_job'],{
+            'installation_id':str(paired_installation_id() or '').strip().upper(),
+            'node_id':str(state.get('node_id') or ''),
+            'secret':_managed_backup_agent_control_secret(),
+        })
+    return changed or job_changed or upload_changed or presigned_upload_changed or recovery_started or stage_started
 
 
 def managed_backup_agent_public_snapshot():
@@ -3140,6 +3149,7 @@ def managed_backup_agent_public_snapshot():
         'storage_credentials': _managed_backup_storage_credentials_snapshot(),
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
         'recovery_download_result': recovery_verifier.public_result(),
+        'supervisor_stage_result': recovery_stage.public_result(),
         'local_backup_create_capable': True,
         'storage_handoff_readiness_capable': True,
         'primary_storage_upload_capable': True,

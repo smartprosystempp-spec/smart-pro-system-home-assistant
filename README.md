@@ -1,3 +1,9 @@
+## Smart Pro System 3.0.16 — Technician-controlled staging to HA Supervisor backup inventory
+The exact verified local quarantine backup may be added to the Home Assistant Supervisor backup list after separate Admin approval. No automatic restore, deletion, cloud replication or export.
+
+## Smart Pro System 3.0.16 — Technician-controlled staging to HA Supervisor backup inventory
+The exact verified local quarantine backup may be added to the Home Assistant Supervisor backup list after separate Admin approval. No automatic restore, deletion, cloud replication or export.
+
 # Smart Pro System — Home Assistant
 
 Επίσημο Home Assistant repository για την οικογένεια **Smart Pro System**.

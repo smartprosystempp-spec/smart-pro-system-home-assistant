@@ -10,6 +10,7 @@ COPY index.html /
 COPY style.css /
 COPY script.js /
 COPY recovery_verifier.py /
+COPY recovery_stage.py /
 COPY app.py /
 RUN chmod a+x /run.sh
 

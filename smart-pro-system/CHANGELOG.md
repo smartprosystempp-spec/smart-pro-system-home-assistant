@@ -1,3 +1,10 @@
+## 3.0.16 — Technician Supervisor Backup Staging v1
+- Admin-approved, Portal-signed, one-shot staging of an already verified quarantine archive into the Home Assistant Supervisor backup inventory.
+- Re-checks archive size and SHA-256 and validates a plain outer Home Assistant backup TAR and metadata before import.
+- Supervisor API is limited to backup listing, backup upload and backup info read-back. No restore, delete, cloud upload, export or cleanup.
+- Existing daily backup scheduler, pairing, primary upload, and verified quarantine archive remain unchanged.
+- Import must be separately authorized; absence of an approved Portal staging job is inert.
+
 ## 3.0.15 — Recovery Quarantine Verification Foundation
 
 - Add one-shot, signed full-object recovery verifier using private /data quarantine, disk reserve and streaming SHA-256.
