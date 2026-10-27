@@ -1,3 +1,10 @@
+## 3.0.15 — Recovery quarantine full GET + SHA-256 pilot
+
+- Signed exact-object one-shot GET in an isolated Home Assistant add-on quarantine.
+- Strict installation/node, HMAC, URL, object size/version and SHA-256 validation.
+- No automatic Supervisor import/restore, no delete/replication.
+- Only a technician, after separate approval in a future phase, may initiate restoration.
+
 # Smart Pro System 3.0.14
 
 ## Managed Backup Controlled Presigned Primary Upload v1

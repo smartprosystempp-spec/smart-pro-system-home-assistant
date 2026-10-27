@@ -1,3 +1,9 @@
+## 3.0.15 — Recovery Quarantine Verification Foundation
+
+- Add one-shot, signed full-object recovery verifier using private /data quarantine, disk reserve and streaming SHA-256.
+- No automatic Home Assistant restore or import, no changes to existing backup/upload lifecycle.
+- Requires compatible Portal recovery envelope; inactive when no signed recovery job exists.
+
 ## 3.0.14 — Managed Backup Controlled Presigned Primary Upload v1
 - Adds exact-bound short-lived presigned PUT/HEAD/GET executor for one verified local backup.
 - Adds capability `primary_presigned_upload_execute`.
