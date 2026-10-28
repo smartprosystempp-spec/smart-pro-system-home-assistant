@@ -1,3 +1,9 @@
+## 3.0.20 — Strict Admin-authorized historical local-job reconciliation
+
+- Independent HMAC-signed `stale_local_reconcile` contract, accepted only with exact previous job ID/nonce, current node and policy, TTL <=120s and previous start before the current add-on process.
+- Marks only the same pre-existing `creating` entry as interrupted; does NOT invoke backup_full, upload, restore, delete, scheduler, or create a new job.
+- One bounded non-secret result reported in authenticated heartbeat for Portal 3.6.333; no new credentials or ports.
+
 ## 3.0.19 — Managed Backup prior persisted job witness (read-only)
 
 - Reports bounded previous local-job state and started timestamp via authenticated heartbeat; no state change or backup action.

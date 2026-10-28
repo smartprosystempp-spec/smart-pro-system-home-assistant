@@ -1,3 +1,7 @@
+## 3.0.20 — Admin-approved stale local-job reconciliation
+
+Dedicated signed `reconcile_job` envelope from Portal 3.6.333. Exact historic job/node/nonce/policy and pre-restart started-at must match before local state is marked interrupted. This is not a backup creation command, has no cloud or Home Assistant backup I/O, and cannot bypass existing backup policies.
+
 ## 3.0.19 — Read-only local job guard evidence
 
 - Shows persisted prior local-job state to diagnose PREVIOUS_JOB_INFLIGHT; no automatic reconciliation, cancellation, retry or backup creation.

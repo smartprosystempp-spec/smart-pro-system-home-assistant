@@ -81,6 +81,7 @@ CONTROL_PLANE_CLOCK_SKEW_SECONDS = 30
 MANAGED_BACKUP_AGENT_CONTRACT_ID = 'smart-pro-managed-backup-agent-v1'
 MANAGED_BACKUP_AGENT_STATE_FILE = Path('/data/managed_backup_agent.json')
 MANAGED_BACKUP_AGENT_LOCK = threading.RLock()
+MANAGED_BACKUP_AGENT_PROCESS_STARTED_AT = int(time.time())  # must postdate stale persisted 'creating' jobs
 MANAGED_BACKUP_AGENT_CAPABILITIES = ('node_identity', 'policy_receive', 'local_backup_readiness', 'local_backup_create', 'storage_handoff_readiness', 'primary_storage_upload', 'primary_presigned_upload', 'primary_presigned_upload_execute', 'recovery_download_sha256', 'recovery_supervisor_stage')
 MANAGED_BACKUP_AGENT_RUNTIME_KEYS = (
     'backup_jobs_authorized',
@@ -1989,6 +1990,7 @@ def _managed_backup_agent_default_state():
         'policy': None,
         'runtime_authority_present': False,
         'local_job': None,
+        'stale_local_reconcile_result': None,
         'storage_target_state': 'not_received',
         'storage_target': None,
         'primary_upload': None,
@@ -3006,6 +3008,87 @@ def _managed_backup_execute_local_job(job, diagnosis=None):
     return True
 
 
+def _managed_backup_reconcile_stale_local_job(command):
+    """Strict single-purpose historical reconciliation. NEVER starts a backup.
+
+    A stale local 'creating' from an earlier add-on process can block all
+    following daily jobs even when Portal already holds the verified off-site
+    result. Only an explicit Admin-approved signed *separate* command may
+    transition the exact same old job to interrupted. No service call occurs.
+    """
+    if not isinstance(command, dict):
+        return False
+    keys={'contract','action','previous_job_id','pending_job_id','previous_nonce','approval_id',
+          'installation_id','node_id','policy_hash','issued_at','expires_at','signature'}
+    if set(command) != keys or command.get('contract') != 'smart-pro-managed-backup-stale-local-reconcile-v1' \
+            or command.get('action') != 'mark_interrupted_local_job':
+        return False
+    old_id=str(command.get('previous_job_id') or '').strip().lower()
+    pending_id=str(command.get('pending_job_id') or '').strip().lower()
+    nonce=str(command.get('previous_nonce') or '').strip().lower()
+    approval=str(command.get('approval_id') or '').strip().lower()
+    node=str(command.get('node_id') or '').strip().lower()
+    policy_hash=str(command.get('policy_hash') or '').strip().lower()
+    signature=str(command.get('signature') or '').strip().lower()
+    if not re.fullmatch(r'mbj_[a-f0-9]{32}',old_id) or not re.fullmatch(r'mbj_[a-f0-9]{32}',pending_id) or old_id==pending_id:
+        return False
+    if not re.fullmatch(r'[a-f0-9]{32}',nonce) or not re.fullmatch(r'[a-f0-9]{32}',approval):
+        return False
+    if not re.fullmatch(r'[a-f0-9]{64}',node) or not re.fullmatch(r'[a-f0-9]{64}',policy_hash) or not re.fullmatch(r'[a-f0-9]{64}',signature):
+        return False
+    try:
+        issued=int(command['issued_at']); expires=int(command['expires_at'])
+    except (TypeError, ValueError):
+        return False
+    now=int(time.time())
+    if issued<=0 or expires<=issued or expires-issued>120 or now<issued-30 or now>expires:
+        return False
+    if str(command.get('installation_id') or '').strip().upper()!=str(paired_installation_id() or '').strip().upper():
+        return False
+    secret=_managed_backup_agent_control_secret()
+    expected=_managed_backup_job_signature(command,secret)
+    if not expected or not hmac.compare_digest(expected,signature):
+        return False
+    state=load_managed_backup_agent_state()
+    current_policy=state.get('policy') if isinstance(state.get('policy'),dict) else {}
+    if node!=str(state.get('node_id') or '').strip().lower() or policy_hash!=str(current_policy.get('policy_hash') or '').strip().lower():
+        return False
+    if not state.get('control_plane_ready') or state.get('runtime_authority_present'):
+        return False
+    local=state.get('local_job') if isinstance(state.get('local_job'),dict) else {}
+    started=int(local.get('started_at',0) or 0)
+    # No state writes or I/O on a nonmatching/new/active job. Crucially this
+    # would NEVER start backup_full even if a stale state disappeared.
+    if str(local.get('job_id') or '')!=old_id or str(local.get('nonce') or '')!=nonce or str(local.get('state') or '')!='creating':
+        return False
+    if started<=0 or started>now-3600 or started>=MANAGED_BACKUP_AGENT_PROCESS_STARTED_AT:
+        return False
+    local['state']='failed'
+    local['result_code']='local_job_interrupted_reconciled'
+    local['verified']=False
+    local['executed_at']=now
+    local['backup_ref_digest']=''
+    local['backup_type']=''
+    state['local_job']=local
+    state['stale_local_reconcile_result']={
+        'contract':'smart-pro-managed-backup-stale-local-reconcile-result-v1',
+        'previous_job_id':old_id, 'pending_job_id':pending_id, 'approval_id':approval,
+        'state':'reconciled', 'reason_code':'previous_job_interrupted', 'observed_at':now,
+    }
+    state['updated_at']=now
+    save_managed_backup_agent_state(state)
+    print('[BACKUP] Historical local creating state reconciled after explicit signed Admin approval; no backup executed',flush=True)
+    return True
+
+
+def _managed_backup_stale_local_reconcile_public_result():
+    state=load_managed_backup_agent_state()
+    result=state.get('stale_local_reconcile_result') if isinstance(state.get('stale_local_reconcile_result'),dict) else None
+    if not result or result.get('contract')!='smart-pro-managed-backup-stale-local-reconcile-result-v1':
+        return None
+    return {k:result.get(k) for k in ('contract','previous_job_id','pending_job_id','approval_id','state','reason_code','observed_at')}
+
+
 def _managed_backup_note_local_job_delivery(job, accepted, reason_code=""):
     """Report whether the *authenticated response* contained a local job.
 
@@ -3105,6 +3188,7 @@ def managed_backup_agent_heartbeat_snapshot():
         'job_result': _managed_backup_local_job_public_result(),
         'local_delivery_observation': _managed_backup_local_delivery_public_observation(),
         'local_guard_evidence': _managed_backup_previous_local_guard_evidence(),
+        'stale_local_reconcile_result': _managed_backup_stale_local_reconcile_public_result(),
         'storage_handoff': _managed_backup_storage_handoff_snapshot(),
         'storage_credentials': _managed_backup_storage_credentials_snapshot(),
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
@@ -3198,6 +3282,10 @@ def _portal_maybe_process_managed_backup(response):
     if runtime_authority_present:
         print('[BACKUP] Portal advertised unsupported persistent data-plane authority; Tools 2.4.40 refused it.', flush=True)
         return changed
+    # Independent signed control: not sent through local backup executor.
+    reconcile_changed = False
+    if isinstance(managed.get('reconcile_job'), dict):
+        reconcile_changed = _managed_backup_reconcile_stale_local_job(managed['reconcile_job'])
     job_changed = False
     delivery_observed = False
     if isinstance(managed.get('job'), dict):
@@ -3225,7 +3313,7 @@ def _portal_maybe_process_managed_backup(response):
             'node_id':str(state.get('node_id') or ''),
             'secret':_managed_backup_agent_control_secret(),
         })
-    return changed or job_changed or delivery_observed or upload_changed or presigned_upload_changed or recovery_started or stage_started
+    return changed or reconcile_changed or job_changed or delivery_observed or upload_changed or presigned_upload_changed or recovery_started or stage_started
 
 
 def managed_backup_agent_public_snapshot():
