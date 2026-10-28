@@ -1,3 +1,7 @@
+## 3.0.19 — Read-only local job guard evidence
+
+- Shows persisted prior local-job state to diagnose PREVIOUS_JOB_INFLIGHT; no automatic reconciliation, cancellation, retry or backup creation.
+
 ## 3.0.18 — Managed Backup Exact Rejection Branch Evidence (diagnostic only)
 
 - Report a bounded non-secret `reason_code` identifying the existing fail-closed branch when the exact local job is NOT ACCEPTED.

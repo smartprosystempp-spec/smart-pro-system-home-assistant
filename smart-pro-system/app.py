@@ -3062,6 +3062,36 @@ def _managed_backup_local_delivery_public_observation():
     return dict(observation)
 
 
+def _managed_backup_previous_local_guard_evidence():
+    """Bounded read-only witness of the *previous* persisted local job.
+
+    A persisted 'creating' state is NOT proof of a live HA backup process.
+    It is emitted only in an authenticated agent heartbeat and never triggers
+    cancellation, backup, retry, data movement or cleanup.
+    """
+    state = load_managed_backup_agent_state()
+    local = state.get('local_job') if isinstance(state.get('local_job'), dict) else {}
+    job_id = str(local.get('job_id', '') or '').strip().lower()
+    job_state = str(local.get('state', '') or '').strip().lower()
+    valid_id = bool(re.fullmatch(r'mbj_[0-9a-f]{32}', job_id))
+    if not valid_id:
+        job_id = ''
+        job_state = 'none'
+    elif job_state not in ('creating', 'local_verified', 'failed'):
+        job_state = 'unknown'
+    try:
+        started_at = max(0, int(local.get('started_at', 0) or 0))
+    except (TypeError, ValueError):
+        started_at = 0
+    return {
+        'contract': 'smart-pro-managed-backup-local-guard-evidence-v1',
+        'previous_job_id': job_id,
+        'previous_job_state': job_state,
+        'previous_started_at': started_at if valid_id else 0,
+        'observed_at': int(time.time()),
+    }
+
+
 def managed_backup_agent_heartbeat_snapshot():
     node_id = _managed_backup_agent_ensure_node_id()
     key_proof = _managed_backup_agent_node_key_id(node_id)
@@ -3074,6 +3104,7 @@ def managed_backup_agent_heartbeat_snapshot():
         'readiness': managed_backup_local_readiness_snapshot(),
         'job_result': _managed_backup_local_job_public_result(),
         'local_delivery_observation': _managed_backup_local_delivery_public_observation(),
+        'local_guard_evidence': _managed_backup_previous_local_guard_evidence(),
         'storage_handoff': _managed_backup_storage_handoff_snapshot(),
         'storage_credentials': _managed_backup_storage_credentials_snapshot(),
         'primary_upload_result': _managed_backup_primary_upload_public_result(),

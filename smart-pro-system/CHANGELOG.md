@@ -1,3 +1,8 @@
+## 3.0.19 — Managed Backup prior persisted job witness (read-only)
+
+- Reports bounded previous local-job state and started timestamp via authenticated heartbeat; no state change or backup action.
+- Portal 3.6.332 correlates the witness to existing history without exposing job IDs or claiming live process execution.
+
 ## 3.0.18 — Managed Backup Exact Rejection Branch Evidence (diagnostic only)
 
 - Report a bounded non-secret `reason_code` identifying the existing fail-closed branch when the exact local job is NOT ACCEPTED.
