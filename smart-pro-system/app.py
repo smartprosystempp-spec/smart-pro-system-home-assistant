@@ -2855,20 +2855,27 @@ def _managed_backup_verify_local_slug(token, slug):
     return False, '', 'backup_slug_not_found'
 
 
-def _managed_backup_execute_local_job(job):
-    if not isinstance(job, dict):
+def _managed_backup_execute_local_job(job, diagnosis=None):
+    # 3.0.18: Record the exact pre-existing fail-closed branch without changing
+    # any guard, dispatch permission or backup execution behavior.
+    def _reject(reason):
+        if isinstance(diagnosis, dict):
+            diagnosis['reason_code'] = reason
         return False
+
+    if not isinstance(job, dict):
+        return _reject('invalid_payload')
     required_keys = {
         'contract', 'job_id', 'action', 'installation_id', 'node_id', 'policy_hash', 'nonce',
         'issued_at', 'expires_at', 'local_only', 'upload_authorized', 'storage_authorized',
         'restore_point_authorized', 'signature',
     }
     if set(job.keys()) != required_keys:
-        return False
+        return _reject('unexpected_envelope_fields')
     if str(job.get('contract', '') or '') != 'smart-pro-managed-backup-local-job-v1':
-        return False
+        return _reject('contract_mismatch')
     if str(job.get('action', '') or '') != 'create_local_backup':
-        return False
+        return _reject('action_mismatch')
     job_id = str(job.get('job_id', '') or '').strip().lower()
     node_id = str(job.get('node_id', '') or '').strip().lower()
     policy_hash = str(job.get('policy_hash', '') or '').strip().lower()
@@ -2876,39 +2883,39 @@ def _managed_backup_execute_local_job(job):
     signature = str(job.get('signature', '') or '').strip().lower()
     installation_id = str(job.get('installation_id', '') or '').strip().upper()
     if not re.fullmatch(r'mbj_[0-9a-f]{32}', job_id):
-        return False
+        return _reject('invalid_job_id')
     if not re.fullmatch(r'[0-9a-f]{64}', node_id) or not re.fullmatch(r'[0-9a-f]{64}', policy_hash):
-        return False
+        return _reject('invalid_node_or_policy')
     if not re.fullmatch(r'[0-9a-f]{32}', nonce) or not re.fullmatch(r'[0-9a-f]{64}', signature):
-        return False
+        return _reject('invalid_nonce_or_signature')
     try:
         issued_at = int(job.get('issued_at', 0) or 0)
         expires_at = int(job.get('expires_at', 0) or 0)
     except (TypeError, ValueError):
-        return False
+        return _reject('invalid_timestamps')
     now = int(time.time())
     if issued_at <= 0 or expires_at <= issued_at or expires_at - issued_at > 120:
-        return False
+        return _reject('invalid_ttl')
     if now < issued_at - 30 or now > expires_at:
-        return False
+        return _reject('expired_or_future_envelope')
     if not bool(job.get('local_only', False)) or bool(job.get('upload_authorized', False)) or bool(job.get('storage_authorized', False)) or bool(job.get('restore_point_authorized', False)):
-        return False
+        return _reject('authority_flags_invalid')
     if installation_id != str(paired_installation_id() or '').strip().upper():
-        return False
+        return _reject('installation_mismatch')
     state = load_managed_backup_agent_state()
     current_node = str(state.get('node_id', '') or '').strip().lower()
     policy = state.get('policy') if isinstance(state.get('policy'), dict) else None
     if current_node != node_id or not isinstance(policy, dict) or str(policy.get('policy_hash', '') or '').strip().lower() != policy_hash:
-        return False
+        return _reject('node_or_policy_mismatch')
     if not bool(state.get('control_plane_ready', False)) or bool(state.get('runtime_authority_present', False)):
-        return False
+        return _reject('control_plane_not_ready')
     readiness = managed_backup_local_readiness_snapshot()
     if str(readiness.get('state', '') or '') != 'ready' or str(readiness.get('reason_code', '') or '') != 'ready':
-        return False
+        return _reject('local_readiness_blocked')
     secret = _managed_backup_agent_control_secret()
     expected = _managed_backup_job_signature(job, secret)
     if not expected or not hmac.compare_digest(expected, signature):
-        return False
+        return _reject('signature_mismatch')
 
     existing = state.get('local_job') if isinstance(state.get('local_job'), dict) else None
     if existing:
@@ -2917,9 +2924,9 @@ def _managed_backup_execute_local_job(job):
         existing_state = str(existing.get('state', '') or '').strip().lower()
         if existing_id == job_id:
             if existing_nonce != nonce:
-                return False
+                return _reject('job_nonce_mismatch')
             if existing_state in ('local_verified', 'failed'):
-                return False
+                return _reject('existing_job_terminal')
             # A prior process may have died after persisting "creating". Fail closed
             # rather than creating a duplicate local backup on a replay.
             if existing_state == 'creating':
@@ -2939,15 +2946,15 @@ def _managed_backup_execute_local_job(job):
             # requires its matching primary upload to have been fully verified,
             # preventing the scheduler from advancing past an unfinished off-site cycle.
             if existing_state not in ('local_verified', 'failed'):
-                return False
+                return _reject('previous_job_inflight')
             if existing_state == 'local_verified':
                 prior_primary = state.get('primary_upload') if isinstance(state.get('primary_upload'), dict) else None
                 if not prior_primary:
-                    return False
+                    return _reject('previous_primary_missing')
                 if str(prior_primary.get('job_id', '') or '').strip().lower() != existing_id:
-                    return False
+                    return _reject('previous_primary_job_mismatch')
                 if str(prior_primary.get('state', '') or '').strip().lower() != 'primary_verified':
-                    return False
+                    return _reject('previous_primary_not_verified')
 
     local_job = {
         'job_id': job_id,
@@ -2999,7 +3006,7 @@ def _managed_backup_execute_local_job(job):
     return True
 
 
-def _managed_backup_note_local_job_delivery(job, accepted):
+def _managed_backup_note_local_job_delivery(job, accepted, reason_code=""):
     """Report whether the *authenticated response* contained a local job.
 
     This is not a dispatcher, not an execution acknowledgement, and grants no
@@ -3017,16 +3024,28 @@ def _managed_backup_note_local_job_delivery(job, accepted):
     local = state.get('local_job') if isinstance(state.get('local_job'), dict) else {}
     same_terminal = local.get('job_id') == job_id and local.get('state') in ('local_verified', 'failed')
     status = 'processed' if accepted else ('already_terminal' if same_terminal else 'not_accepted')
+    code = 'accepted' if accepted else ('already_terminal' if same_terminal else str(reason_code or 'unspecified_rejection'))
+    allowed_codes = {'accepted', 'already_terminal', 'unspecified_rejection',
+        'invalid_payload', 'unexpected_envelope_fields', 'contract_mismatch', 'action_mismatch',
+        'invalid_job_id', 'invalid_node_or_policy', 'invalid_nonce_or_signature',
+        'invalid_timestamps', 'invalid_ttl', 'expired_or_future_envelope',
+        'authority_flags_invalid', 'installation_mismatch', 'node_or_policy_mismatch',
+        'control_plane_not_ready', 'local_readiness_blocked', 'signature_mismatch',
+        'job_nonce_mismatch', 'existing_job_terminal', 'previous_job_inflight',
+        'previous_primary_missing', 'previous_primary_job_mismatch', 'previous_primary_not_verified'}
+    if code not in allowed_codes:
+        code = 'unspecified_rejection'
     if previous.get('job_id') == job_id and previous.get('nonce') == nonce:
         # Preserve first positive observation; a subsequent response may contain
         # an idempotent replay of an already completed job.
-        if previous.get('status') == 'processed' or previous.get('status') == status:
+        if previous.get('status') == 'processed' or (previous.get('status') == status and previous.get('reason_code')):
             return False
     state['local_delivery_observation'] = {
         'contract': 'smart-pro-managed-backup-local-delivery-observation-v1',
         'job_id': job_id,
         'nonce': nonce,
         'status': status,
+        'reason_code': code,
         'observed_at': int(time.time()),
     }
     state['updated_at'] = int(time.time())
@@ -3151,8 +3170,10 @@ def _portal_maybe_process_managed_backup(response):
     job_changed = False
     delivery_observed = False
     if isinstance(managed.get('job'), dict):
-        job_changed = _managed_backup_execute_local_job(managed.get('job'))
-        delivery_observed = _managed_backup_note_local_job_delivery(managed.get('job'), job_changed)
+        local_diagnosis = {}
+        job_changed = _managed_backup_execute_local_job(managed.get('job'), local_diagnosis)
+        delivery_observed = _managed_backup_note_local_job_delivery(
+            managed.get('job'), job_changed, local_diagnosis.get('reason_code', ''))
     upload_changed = False
     if isinstance(managed.get('upload_job'), dict):
         upload_changed = _managed_backup_execute_primary_upload(managed.get('upload_job'))

@@ -1,3 +1,9 @@
+## 3.0.18 — Managed Backup Exact Rejection Branch Evidence (diagnostic only)
+
+- Report a bounded non-secret `reason_code` identifying the existing fail-closed branch when the exact local job is NOT ACCEPTED.
+- Preserves all original validation branches, backup creation behavior, signatures, no retry, no queue reset, no extra data-plane authority.
+- Supports authenticated Portal 3.6.331 reason presentation; no secret, path, HMAC, node ID, provider key or archive data rendered.
+
 ## 3.0.17 — Managed Backup Delivery Observation v1
 
 A local-only receipt of the existing signed backup-job offer is reported via the authenticated heartbeat, without new authority or retries.
