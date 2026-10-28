@@ -1,3 +1,5 @@
+## Smart Pro System 3.0.18 — Managed Backup rejection branch evidence
+
 ## Smart Pro System 3.0.17 — Managed Backup Delivery Observation
 
 Source code adds a bounded receipt only; no scheduler or backup execution changes.
