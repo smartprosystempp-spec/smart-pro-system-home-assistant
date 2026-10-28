@@ -3194,6 +3194,7 @@ def managed_backup_agent_heartbeat_snapshot():
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
         'recovery_download_result': recovery_verifier.public_result(),
         'supervisor_stage_result': recovery_stage.public_result(),
+        'recovery_quarantine_inventory': recovery_stage.quarantine_inventory_readonly(),
         'reported_at': int(time.time()),
     }
 
@@ -3337,6 +3338,7 @@ def managed_backup_agent_public_snapshot():
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
         'recovery_download_result': recovery_verifier.public_result(),
         'supervisor_stage_result': recovery_stage.public_result(),
+        'recovery_quarantine_inventory': recovery_stage.quarantine_inventory_readonly(),
         'local_backup_create_capable': True,
         'storage_handoff_readiness_capable': True,
         'primary_storage_upload_capable': True,

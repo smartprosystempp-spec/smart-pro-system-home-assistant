@@ -60,6 +60,51 @@ def public_result():
                                     'state','reason','slug_hint','finished_at','quarantine_cleanup')}
 
 
+
+
+def quarantine_inventory_readonly():
+    """Bounded local lstat only. Never hashes, opens, restores or deletes a file.
+
+    Historical supervisor-stage success is informational, NOT live Supervisor
+    verification and NOT deletion authorization.
+    """
+    with _LOCK:
+        stage = _read_state()
+    held = recovery_verifier.public_result()
+    if not isinstance(held, dict) or not re.fullmatch(r'mbr_[a-f0-9]{32}', str(held.get('request_id') or '')):
+        return {'contract':'smart-pro-recovery-quarantine-inventory-v1', 'state':'no_bound_record', 'observed_at':int(time.time()), 'delete_authorized':False}
+    request_id = held['request_id']
+    path = _ROOT / (request_id + '.tar')
+    state='absent'
+    try:
+        info = path.lstat()
+        expected = int(held.get('bytes_received') or 0)
+        if (stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and
+            0 < expected <= 2*1024**3 and info.st_size == expected):
+            state='present_size_match_unhashed'
+        else:
+            state='file_mismatch'
+    except FileNotFoundError:
+        state='absent'
+    except (OSError, ValueError, TypeError):
+        state='inspection_failed'
+    stage_match = (stage.get('recovery_request_id') == request_id and
+                   stage.get('point_id') == held.get('point_id') and
+                   stage.get('node_id') == held.get('node_id'))
+    return {
+        'contract':'smart-pro-recovery-quarantine-inventory-v1',
+        'request_id':request_id,
+        'point_id':str(held.get('point_id') or ''),
+        'node_id':str(held.get('node_id') or ''),
+        'state':state,
+        'supervisor_stage_historical': 'imported' if stage_match and stage.get('state') == 'imported' else 'unconfirmed',
+        'observed_at':int(time.time()),
+        'sha256_rechecked':False,
+        'supervisor_live_rechecked':False,
+        'delete_authorized':False,
+    }
+
+
 def _validated_archive(path, expected_size, expected_hash):
     """No extraction, links, or metadata disclosure; re-hash the exact archive."""
     info=path.lstat()

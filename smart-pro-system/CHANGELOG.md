@@ -1,3 +1,5 @@
+Smart Pro System 3.0.22: read-only recovery quarantine inventory. No hash recheck, live Supervisor query, cleanup or deletion authority.
+
 ## 3.0.21 — Recovery Quarantine Automatic Cleanup after Supervisor import
 
 - Delete only the exact `/data/managed_backup_recovery/<recovery_request_id>.tar` temporary download after a successfully verified Supervisor import and matching backup info read-back.
