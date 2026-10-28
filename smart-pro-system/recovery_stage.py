@@ -181,7 +181,7 @@ def quarantine_inventory_readonly():
     stage_match = (stage.get('recovery_request_id') == request_id and
                    stage.get('point_id') == held.get('point_id') and
                    stage.get('node_id') == held.get('node_id'))
-    return {
+    result = {
         'contract':'smart-pro-recovery-quarantine-inventory-v1',
         'request_id':request_id,
         'point_id':str(held.get('point_id') or ''),
@@ -193,6 +193,12 @@ def quarantine_inventory_readonly():
         'supervisor_live_rechecked':False,
         'delete_authorized':False,
     }
+    # 3.0.25: metadata-only post-import directory confirmation. This NEVER
+    # scans file contents, deletes anything or alters Supervisor/backup state.
+    # Emitted only for the same bound record and an absent exact archive.
+    if state == 'absent' and stage_match and stage.get('state') == 'imported' and stage.get('quarantine_cleanup') == 'deleted':
+        result['directory_diagnostic'] = quarantine_orphan_survey_readonly()
+    return result
 
 
 def _validated_archive(path, expected_size, expected_hash):

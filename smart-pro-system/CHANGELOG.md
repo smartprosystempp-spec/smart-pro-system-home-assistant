@@ -1,3 +1,8 @@
+## 3.0.25 — Bound Recovery Post-Import Directory Evidence (read-only)
+- An authenticated bound recovery inventory can report a bounded directory survey after the matched Supervisor stage was imported and the exact temporary archive cleanup was reported deleted.
+- The survey reads directory metadata only, never file contents, never restores or deletes.
+- All download/import/cleanup decisions and grants are byte-identical to 3.0.24.
+
 Smart Pro System 3.0.24 — bounded read-only quarantine directory survey; no archive contents, SHA-256 recheck, Supervisor queries, delete or restore.
 Smart Pro System 3.0.23: read-only recovery quarantine inventory. No hash recheck, live Supervisor query, cleanup or deletion authority.
 

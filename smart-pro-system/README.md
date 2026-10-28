@@ -1,3 +1,5 @@
+Smart Pro System 3.0.25 — read-only post-import directory evidence on existing authenticated heartbeat. No new backup, restore, Supervisor or cleanup authority.
+
 Smart Pro System 3.0.24 — bounded read-only quarantine directory survey; no archive contents, SHA-256 recheck, Supervisor queries, delete or restore.
 Smart Pro System 3.0.23: read-only recovery quarantine inventory. No hash recheck, live Supervisor query, cleanup or deletion authority.
 
