@@ -1,3 +1,10 @@
+## 3.0.17 — Managed Backup local-job delivery observation (no new job authority)
+
+- Emits a bounded authenticated-heartbeat observation for a received local-job envelope: processed, already-terminal or not-accepted.
+- Persists only exact job ID, nonce, coarse status and observation time in existing agent /data; no HMAC or signed URL.
+- Does not change job validation, backup execution, automatic retries, scheduler, presigned upload, recovery or restore.
+- Portal 3.6.330 can surface this observation only for the exact queued job and node.
+
 ## 3.0.16 — Technician Supervisor Backup Staging v1
 - Admin-approved, Portal-signed, one-shot staging of an already verified quarantine archive into the Home Assistant Supervisor backup inventory.
 - Re-checks archive size and SHA-256 and validates a plain outer Home Assistant backup TAR and metadata before import.

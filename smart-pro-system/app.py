@@ -2999,6 +2999,50 @@ def _managed_backup_execute_local_job(job):
     return True
 
 
+def _managed_backup_note_local_job_delivery(job, accepted):
+    """Report whether the *authenticated response* contained a local job.
+
+    This is not a dispatcher, not an execution acknowledgement, and grants no
+    additional authority. A rejection is not retried here. The full job envelope,
+    signature and key are never stored in the observation.
+    """
+    if not isinstance(job, dict):
+        return False
+    job_id = str(job.get('job_id') or '').strip().lower()
+    nonce = str(job.get('nonce') or '').strip().lower()
+    if not re.fullmatch(r'mbj_[0-9a-f]{32}', job_id) or not re.fullmatch(r'[0-9a-f]{32}', nonce):
+        return False
+    state = load_managed_backup_agent_state()
+    previous = state.get('local_delivery_observation') if isinstance(state.get('local_delivery_observation'), dict) else {}
+    local = state.get('local_job') if isinstance(state.get('local_job'), dict) else {}
+    same_terminal = local.get('job_id') == job_id and local.get('state') in ('local_verified', 'failed')
+    status = 'processed' if accepted else ('already_terminal' if same_terminal else 'not_accepted')
+    if previous.get('job_id') == job_id and previous.get('nonce') == nonce:
+        # Preserve first positive observation; a subsequent response may contain
+        # an idempotent replay of an already completed job.
+        if previous.get('status') == 'processed' or previous.get('status') == status:
+            return False
+    state['local_delivery_observation'] = {
+        'contract': 'smart-pro-managed-backup-local-delivery-observation-v1',
+        'job_id': job_id,
+        'nonce': nonce,
+        'status': status,
+        'observed_at': int(time.time()),
+    }
+    state['updated_at'] = int(time.time())
+    save_managed_backup_agent_state(state)
+    return True
+
+
+def _managed_backup_local_delivery_public_observation():
+    state = load_managed_backup_agent_state()
+    observation = state.get('local_delivery_observation') if isinstance(state.get('local_delivery_observation'), dict) else {}
+    if (observation.get('contract') != 'smart-pro-managed-backup-local-delivery-observation-v1'
+            or observation.get('status') not in ('processed', 'already_terminal', 'not_accepted')):
+        return None
+    return dict(observation)
+
+
 def managed_backup_agent_heartbeat_snapshot():
     node_id = _managed_backup_agent_ensure_node_id()
     key_proof = _managed_backup_agent_node_key_id(node_id)
@@ -3010,6 +3054,7 @@ def managed_backup_agent_heartbeat_snapshot():
         'capabilities': list(MANAGED_BACKUP_AGENT_CAPABILITIES),
         'readiness': managed_backup_local_readiness_snapshot(),
         'job_result': _managed_backup_local_job_public_result(),
+        'local_delivery_observation': _managed_backup_local_delivery_public_observation(),
         'storage_handoff': _managed_backup_storage_handoff_snapshot(),
         'storage_credentials': _managed_backup_storage_credentials_snapshot(),
         'primary_upload_result': _managed_backup_primary_upload_public_result(),
@@ -3104,8 +3149,10 @@ def _portal_maybe_process_managed_backup(response):
         print('[BACKUP] Portal advertised unsupported persistent data-plane authority; Tools 2.4.40 refused it.', flush=True)
         return changed
     job_changed = False
+    delivery_observed = False
     if isinstance(managed.get('job'), dict):
         job_changed = _managed_backup_execute_local_job(managed.get('job'))
+        delivery_observed = _managed_backup_note_local_job_delivery(managed.get('job'), job_changed)
     upload_changed = False
     if isinstance(managed.get('upload_job'), dict):
         upload_changed = _managed_backup_execute_primary_upload(managed.get('upload_job'))
@@ -3126,7 +3173,7 @@ def _portal_maybe_process_managed_backup(response):
             'node_id':str(state.get('node_id') or ''),
             'secret':_managed_backup_agent_control_secret(),
         })
-    return changed or job_changed or upload_changed or presigned_upload_changed or recovery_started or stage_started
+    return changed or job_changed or delivery_observed or upload_changed or presigned_upload_changed or recovery_started or stage_started
 
 
 def managed_backup_agent_public_snapshot():

@@ -1,3 +1,7 @@
+## Smart Pro System 3.0.17 — Managed Backup Delivery Observation
+
+Source code adds a bounded receipt only; no scheduler or backup execution changes.
+
 ## Smart Pro System 3.0.16 — Technician-controlled staging to HA Supervisor backup inventory
 The exact verified local quarantine backup may be added to the Home Assistant Supervisor backup list after separate Admin approval. No automatic restore, deletion, cloud replication or export.
 

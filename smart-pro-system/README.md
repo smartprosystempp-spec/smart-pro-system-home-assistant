@@ -1,3 +1,7 @@
+## 3.0.17 — Managed Backup Delivery Observation v1
+
+A local-only receipt of the existing signed backup-job offer is reported via the authenticated heartbeat, without new authority or retries.
+
 ## 3.0.16 — Technician Supervisor Backup Staging v1
 
 After independent Admin approval, an exact, HMAC-signed staging request may import the SHA-256 verified quarantine archive into the local Home Assistant Supervisor backup inventory. This is **not** a restore and does not overwrite current configuration. The technician must separately initiate restore through Home Assistant on an approved test installation.
