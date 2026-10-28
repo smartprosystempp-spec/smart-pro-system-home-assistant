@@ -1,3 +1,5 @@
+Smart Pro System 3.0.22: read-only recovery quarantine inventory. No hash recheck, live Supervisor query, cleanup or deletion authority.
+
 ## Smart Pro System 3.0.18 — Managed Backup rejection branch evidence
 
 ## Smart Pro System 3.0.17 — Managed Backup Delivery Observation
