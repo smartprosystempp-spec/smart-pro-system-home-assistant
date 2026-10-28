@@ -142,8 +142,29 @@ class StageTests(unittest.TestCase):
              patch.dict('os.environ',{'SUPERVISOR_TOKEN':'fake-test-token'}):
             m._worker(fake)
             self.assertEqual(m.public_result()['state'],'imported')
+            self.assertEqual(m.public_result()['quarantine_cleanup'],'deleted')
         self.assertEqual(calls,[('GET','/backups',False),('POST','/backups/new/upload',True),('GET','/backups/deadbeef/info',False)])
-        self.assertTrue((folder/(fake['recovery_request_id']+'.tar')).exists())
+        self.assertFalse((folder/(fake['recovery_request_id']+'.tar')).exists())
+
+    def test_cleanup_rejects_replaced_archive(self):
+        plan={'recovery_request_id':'mbr_'+'d'*32,'size':self.size}
+        archive=self.root/(plan['recovery_request_id']+'.tar')
+        shutil.copyfile(self.archive,archive)
+        original=archive.lstat()
+        replacement=self.root/'replacement.tar'
+        shutil.copyfile(self.archive,replacement)
+        replacement.replace(archive)
+        with patch.object(m,'_ROOT',self.root):
+            self.assertEqual(m._cleanup_imported_quarantine(archive,plan,original),'retained')
+        self.assertTrue(archive.exists())
+
+    def test_cleanup_refuses_symlink(self):
+        plan={'recovery_request_id':'mbr_'+'d'*32,'size':self.size}
+        archive=self.root/(plan['recovery_request_id']+'.tar')
+        archive.symlink_to(self.archive)
+        with patch.object(m,'_ROOT',self.root):
+            self.assertEqual(m._cleanup_imported_quarantine(archive,plan,self.archive.lstat()),'retained')
+        self.assertTrue(self.archive.exists())
 
     def test_existing_slug_never_overwritten(self):
         fake={'request_id':'mbst_'+'a'*32,'recovery_request_id':'mbr_'+'d'*32,
@@ -159,6 +180,7 @@ class StageTests(unittest.TestCase):
             m._worker(fake)
             self.assertEqual(m.public_result()['state'],'failed')
         self.assertEqual(calls,['/backups'])
+        self.assertTrue((folder/(fake['recovery_request_id']+'.tar')).exists())
 
 
     def test_http_upload_is_multipart_and_never_restore(self):
