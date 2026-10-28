@@ -1,3 +1,4 @@
+Smart Pro System 3.0.24 — bounded read-only quarantine directory survey; no archive contents, SHA-256 recheck, Supervisor queries, delete or restore.
 Smart Pro System 3.0.23: read-only recovery quarantine inventory. No hash recheck, live Supervisor query, cleanup or deletion authority.
 
 ## 3.0.21 — Admin-approved stale local-job reconciliation

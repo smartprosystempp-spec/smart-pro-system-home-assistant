@@ -88,6 +88,70 @@ def quarantine_record_diagnostics_readonly():
     }
 
 
+
+def quarantine_orphan_survey_readonly():
+    """Strictly bounded, direct-child metadata survey for an unbound old archive.
+
+    No file contents, cloud calls, Supervisor calls, filenames or raw identifiers
+    in telemetry. A candidate-name SHA-256 is NOT an archive content hash.
+    This survey never authorizes rebinding, cleanup, import or restore.
+    """
+    result = {
+        'contract': 'smart-pro-quarantine-orphan-survey-v1',
+        'state': 'inspection_failed', 'archive_count': 0, 'partial_count': 0,
+        'candidate_bytes': 0, 'candidate_request_sha256': '',
+        'sha256_rechecked': False, 'supervisor_live_rechecked': False,
+        'delete_authorized': False,
+    }
+    try:
+        directory = _ROOT.lstat()
+        if not stat.S_ISDIR(directory.st_mode):
+            result['state'] = 'unsafe_directory'
+            return result
+    except FileNotFoundError:
+        result['state'] = 'directory_absent'
+        return result
+    except OSError:
+        return result
+    archives = []
+    partials = 0
+    seen = 0
+    try:
+        with os.scandir(_ROOT) as entries:
+            for entry in entries:
+                seen += 1
+                if seen > 128:
+                    result['state'] = 'directory_limit_exceeded'
+                    return result
+                name = entry.name
+                if re.fullmatch(r'mbr_[a-f0-9]{32}\.part', name):
+                    partials += 1
+                elif re.fullmatch(r'mbr_[a-f0-9]{32}\.tar', name):
+                    archives.append((name, entry))
+    except OSError:
+        return result
+    result['archive_count'] = min(len(archives), 2)
+    result['partial_count'] = min(partials, 2)
+    if not archives:
+        result['state'] = 'no_archive_candidate' if not partials else 'partials_only'
+        return result
+    if len(archives) != 1 or partials:
+        result['state'] = 'ambiguous_candidates'
+        return result
+    name, entry = archives[0]
+    try:
+        info = entry.stat(follow_symlinks=False)
+    except OSError:
+        return result
+    if not (stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            and 0 < info.st_size <= 2 * 1024**3):
+        result['state'] = 'unsafe_candidate'
+        return result
+    result['state'] = 'single_candidate_unbound'
+    result['candidate_bytes'] = int(info.st_size)
+    result['candidate_request_sha256'] = hashlib.sha256(name[:-4].encode('ascii')).hexdigest()
+    return result
+
 def quarantine_inventory_readonly():
     """Bounded local lstat only. Never hashes, opens, restores or deletes a file.
 
@@ -98,7 +162,7 @@ def quarantine_inventory_readonly():
         stage = _read_state()
     held = recovery_verifier.public_result()
     if not isinstance(held, dict) or not re.fullmatch(r'mbr_[a-f0-9]{32}', str(held.get('request_id') or '')):
-        return {'contract':'smart-pro-recovery-quarantine-inventory-v1', 'state':'no_bound_record', 'observed_at':int(time.time()), 'delete_authorized':False, 'record_diagnostic':quarantine_record_diagnostics_readonly()}
+        return {'contract':'smart-pro-recovery-quarantine-inventory-v1', 'state':'no_bound_record', 'observed_at':int(time.time()), 'delete_authorized':False, 'record_diagnostic':quarantine_record_diagnostics_readonly(), 'directory_diagnostic':quarantine_orphan_survey_readonly()}
     request_id = held['request_id']
     path = _ROOT / (request_id + '.tar')
     state='absent'
