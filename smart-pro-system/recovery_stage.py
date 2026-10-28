@@ -57,7 +57,7 @@ def public_result():
         rec=_read_state()
     if rec.get('state') not in ('running','imported','failed'):return None
     return {k:rec.get(k) for k in ('contract','request_id','recovery_request_id','point_id','node_id',
-                                    'state','reason','slug_hint','finished_at')}
+                                    'state','reason','slug_hint','finished_at','quarantine_cleanup')}
 
 
 def _validated_archive(path, expected_size, expected_hash):
@@ -146,15 +146,39 @@ def _call_supervisor(method, route, token, archive=None):
     finally:conn.close()
 
 
+
+def _cleanup_imported_quarantine(archive, plan, original):
+    """Remove only the exact downloaded archive after verified Supervisor read-back.
+
+    Never walk directories, remove backup inventory, follow links, or delete a
+    changed/replaced file. A failure leaves the archive for technician review.
+    """
+    if not re.fullmatch(r'mbr_[a-f0-9]{32}', str(plan.get('recovery_request_id') or '')):
+        return 'retained'
+    if archive.parent != _ROOT or archive.name != plan['recovery_request_id'] + '.tar':
+        return 'retained'
+    try:
+        current = archive.lstat()
+        if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1 or
+                current.st_size != plan['size'] or current.st_dev != original.st_dev or
+                current.st_ino != original.st_ino):
+            return 'retained'
+        archive.unlink()
+        return 'deleted'
+    except OSError:
+        return 'retained'
+
+
 def _worker(plan):
     result={'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
             'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
-            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','finished_at':0}
+            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','finished_at':0,'quarantine_cleanup':'not_attempted'}
     try:
         token=str(os.getenv('SUPERVISOR_TOKEN') or '').strip()
         if not token:raise ValueError('supervisor_token_missing')
         archive=_ROOT/(plan['recovery_request_id']+'.tar')
         slug=_validated_archive(archive,plan['size'],plan['sha'])
+        original=archive.lstat()
         # Explicit fail-closed collision check. Never replace a Supervisor backup.
         collection=_call_supervisor('GET','/backups',token)
         if not isinstance(collection,dict) or not isinstance(collection.get('backups'),list):raise ValueError('supervisor_listing_invalid')
@@ -164,6 +188,7 @@ def _worker(plan):
         details=_call_supervisor('GET','/backups/'+quote(slug,safe='')+'/info',token)
         if not isinstance(details,dict) or details.get('slug')!=slug:raise ValueError('supervisor_import_readback_failed')
         result.update(state='imported',reason='supervisor_backup_listed',slug_hint=slug[-12:])
+        result['quarantine_cleanup']=_cleanup_imported_quarantine(archive,plan,original)
     except (OSError,ValueError,tarfile.TarError,RuntimeError) as err:
         # No raw response bodies, file paths, tokens, backup metadata or URLs in result.
         code=str(err) if isinstance(err,ValueError) else ''
@@ -188,6 +213,6 @@ def maybe_start(job,ctx):
         if last.get('request_id')==plan['request_id'] or last.get('state') in ('running','imported'):return False
         _save_state({'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
                      'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
-                     'node_id':plan['node_id'],'state':'running','reason':'stage_started','slug_hint':'','finished_at':0})
+                     'node_id':plan['node_id'],'state':'running','reason':'stage_started','slug_hint':'','finished_at':0,'quarantine_cleanup':'not_attempted'})
     threading.Thread(target=_worker,args=(plan,),name='managed-backup-supervisor-stage',daemon=True).start()
     return True

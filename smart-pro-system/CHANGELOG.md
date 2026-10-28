@@ -1,3 +1,10 @@
+## 3.0.21 — Recovery Quarantine Automatic Cleanup after Supervisor import
+
+- Delete only the exact `/data/managed_backup_recovery/<recovery_request_id>.tar` temporary download after a successfully verified Supervisor import and matching backup info read-back.
+- Refuse symlinks, hard links, replaced files, path mismatch, and unsuccessful imports. Cleanup failure retains the archive; does not alter Supervisor backup or OVH Object Storage.
+- No automatic restore, Supervisor backup delete, cloud delete, or sweeping cleanup of other files.
+- Cleanup only runs as part of an explicitly authorized staging job; upgrading the add-on does not delete old files.
+
 ## 3.0.20 — Strict Admin-authorized historical local-job reconciliation
 
 - Independent HMAC-signed `stale_local_reconcile` contract, accepted only with exact previous job ID/nonce, current node and policy, TTL <=120s and previous start before the current add-on process.
