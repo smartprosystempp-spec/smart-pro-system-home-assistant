@@ -62,6 +62,32 @@ def public_result():
 
 
 
+def quarantine_record_diagnostics_readonly():
+    """Bounded metadata-only diagnosis. No archive scans, file reads, hashes or mutations."""
+    def metadata_status(path):
+        try:
+            info=path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 65536:
+                return 'unsafe_metadata'
+            try:
+                value=json.loads(path.read_text(encoding='utf-8'))
+            except (ValueError, UnicodeError):
+                return 'invalid_json'
+            if not isinstance(value,dict):
+                return 'invalid_json'
+            return 'valid_json' if re.fullmatch(r'mbr_[a-f0-9]{32}',str(value.get('recovery_request_id' if path == _META else 'request_id') or '')) else 'missing_request_binding'
+        except FileNotFoundError:
+            return 'absent'
+        except OSError:
+            return 'inspection_failed'
+    return {
+        'recovery_record':metadata_status(recovery_verifier._META),
+        'stage_record':metadata_status(_META),
+        'sha256_rechecked':False,'supervisor_live_rechecked':False,
+        'delete_authorized':False,
+    }
+
+
 def quarantine_inventory_readonly():
     """Bounded local lstat only. Never hashes, opens, restores or deletes a file.
 
@@ -72,7 +98,7 @@ def quarantine_inventory_readonly():
         stage = _read_state()
     held = recovery_verifier.public_result()
     if not isinstance(held, dict) or not re.fullmatch(r'mbr_[a-f0-9]{32}', str(held.get('request_id') or '')):
-        return {'contract':'smart-pro-recovery-quarantine-inventory-v1', 'state':'no_bound_record', 'observed_at':int(time.time()), 'delete_authorized':False}
+        return {'contract':'smart-pro-recovery-quarantine-inventory-v1', 'state':'no_bound_record', 'observed_at':int(time.time()), 'delete_authorized':False, 'record_diagnostic':quarantine_record_diagnostics_readonly()}
     request_id = held['request_id']
     path = _ROOT / (request_id + '.tar')
     state='absent'
