@@ -1,3 +1,4 @@
+3.0.27 — Supervisor slug evidence only; one read-only field in authenticated stage results.
 3.0.26 historical recovery staging grant compatibility. No supervisor Restore or Delete.
 
 Smart Pro System 3.0.24 — bounded read-only quarantine directory survey; no archive contents, SHA-256 recheck, Supervisor queries, delete or restore.
