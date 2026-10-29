@@ -1,3 +1,5 @@
+3.0.27 — Add bounded full Supervisor backup slug evidence only to authenticated successful-import and slug-collision stage results. No new storage or mutation authority.
+
 3.0.26 — Distinct, signed historical Supervisor staging after completed previous import, with strict point/request binding. No Restore/Delete.
 
 Smart Pro System 3.0.25 — read-only post-import directory evidence on existing authenticated heartbeat. No new backup, restore, Supervisor or cleanup authority.

@@ -1,3 +1,8 @@
+## 3.0.27 — Authenticated Supervisor slug collision evidence (read-only)
+- On a Supervisor-list-confirmed collision, report the full validated backup slug alongside the existing collision reason through the same authenticated stage result; do not infer identical contents.
+- On an import with successful Supervisor info read-back, report the imported backup slug for operator traceability.
+- Preserve all signed grants, authorization, upload, retry limits, SHA-256, automatic cleanup, Restore/Delete OFF.
+
 3.0.26 — Distinct, signed historical Supervisor staging after completed previous import, with strict point/request binding. No Restore/Delete.
 
 ## 3.0.25 — Bound Recovery Post-Import Directory Evidence (read-only)

@@ -57,7 +57,7 @@ def public_result():
         rec=_read_state()
     if rec.get('state') not in ('running','imported','failed'):return None
     return {k:rec.get(k) for k in ('contract','request_id','recovery_request_id','point_id','node_id',
-                                    'state','reason','slug_hint','finished_at','quarantine_cleanup')}
+                                    'state','reason','slug_hint','supervisor_slug','finished_at','quarantine_cleanup')}
 
 
 
@@ -313,7 +313,7 @@ def _cleanup_imported_quarantine(archive, plan, original):
 def _worker(plan):
     result={'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
             'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
-            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','finished_at':0,'quarantine_cleanup':'not_attempted'}
+            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','supervisor_slug':'','finished_at':0,'quarantine_cleanup':'not_attempted'}
     try:
         token=str(os.getenv('SUPERVISOR_TOKEN') or '').strip()
         if not token:raise ValueError('supervisor_token_missing')
@@ -323,12 +323,17 @@ def _worker(plan):
         # Explicit fail-closed collision check. Never replace a Supervisor backup.
         collection=_call_supervisor('GET','/backups',token)
         if not isinstance(collection,dict) or not isinstance(collection.get('backups'),list):raise ValueError('supervisor_listing_invalid')
-        if any(isinstance(item,dict) and item.get('slug')==slug for item in collection['backups']):raise ValueError('supervisor_slug_already_present')
+        # 3.0.27: exact operator evidence is emitted only when the Supervisor
+        # listing confirms a collision; never infer identical file contents.
+        if any(isinstance(item,dict) and item.get('slug')==slug for item in collection['backups']):
+            result['supervisor_slug']=slug
+            result['slug_hint']=slug[-12:]
+            raise ValueError('supervisor_slug_already_present')
         result_body=_call_supervisor('POST','/backups/new/upload',token,archive)
         if not isinstance(result_body,dict) or result_body.get('slug')!=slug:raise ValueError('supervisor_import_unconfirmed')
         details=_call_supervisor('GET','/backups/'+quote(slug,safe='')+'/info',token)
         if not isinstance(details,dict) or details.get('slug')!=slug:raise ValueError('supervisor_import_readback_failed')
-        result.update(state='imported',reason='supervisor_backup_listed',slug_hint=slug[-12:])
+        result.update(state='imported',reason='supervisor_backup_listed',slug_hint=slug[-12:],supervisor_slug=slug)
         result['quarantine_cleanup']=_cleanup_imported_quarantine(archive,plan,original)
     except (OSError,ValueError,tarfile.TarError,RuntimeError) as err:
         # No raw response bodies, file paths, tokens, backup metadata or URLs in result.
