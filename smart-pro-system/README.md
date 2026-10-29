@@ -1,3 +1,5 @@
+3.0.28 — Read-only duplicate slug source evidence (listing-only vs matching Supervisor info). No restore/delete.
+
 3.0.27 — Add bounded full Supervisor backup slug evidence only to authenticated successful-import and slug-collision stage results. No new storage or mutation authority.
 
 3.0.26 — Distinct, signed historical Supervisor staging after completed previous import, with strict point/request binding. No Restore/Delete.
@@ -61,3 +63,6 @@ Safety: no provider credential delivery, no replication, no delete, no restore e
 - Home Assistant / Guardian health.
 
 Εμπορικές ενέργειες, πληρωμές και αλλαγές πακέτου παραμένουν στο Smart Pro Portal.
+
+
+3.0.28: Read-only Supervisor duplicate evidence is included in the existing authenticated stage result (`info_confirmed` or `listing_only`). It never implies the backup contents are identical.

@@ -57,7 +57,7 @@ def public_result():
         rec=_read_state()
     if rec.get('state') not in ('running','imported','failed'):return None
     return {k:rec.get(k) for k in ('contract','request_id','recovery_request_id','point_id','node_id',
-                                    'state','reason','slug_hint','supervisor_slug','finished_at','quarantine_cleanup')}
+                                    'state','reason','slug_hint','supervisor_slug','collision_evidence','collision_checked_at','finished_at','quarantine_cleanup')}
 
 
 
@@ -313,7 +313,7 @@ def _cleanup_imported_quarantine(archive, plan, original):
 def _worker(plan):
     result={'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
             'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
-            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','supervisor_slug':'','finished_at':0,'quarantine_cleanup':'not_attempted'}
+            'node_id':plan['node_id'],'state':'failed','reason':'staging_failed','slug_hint':'','supervisor_slug':'','collision_evidence':'none','collision_checked_at':0,'finished_at':0,'quarantine_cleanup':'not_attempted'}
     try:
         token=str(os.getenv('SUPERVISOR_TOKEN') or '').strip()
         if not token:raise ValueError('supervisor_token_missing')
@@ -326,8 +326,20 @@ def _worker(plan):
         # 3.0.27: exact operator evidence is emitted only when the Supervisor
         # listing confirms a collision; never infer identical file contents.
         if any(isinstance(item,dict) and item.get('slug')==slug for item in collection['backups']):
+            # 3.0.28: a matching Supervisor listing is a collision, NOT proof
+            # of identical archive bytes. Try a bounded read-only /info lookup
+            # to distinguish exact live slug readback from listing-only evidence.
+            # Any API failure stays fail-closed and NEVER proceeds to upload.
             result['supervisor_slug']=slug
             result['slug_hint']=slug[-12:]
+            result['collision_evidence']='listing_only'
+            result['collision_checked_at']=int(time.time())
+            try:
+                existing=_call_supervisor('GET','/backups/'+quote(slug,safe='')+'/info',token)
+                if isinstance(existing,dict) and existing.get('slug')==slug:
+                    result['collision_evidence']='info_confirmed'
+            except (OSError, ValueError, RuntimeError):
+                pass
             raise ValueError('supervisor_slug_already_present')
         result_body=_call_supervisor('POST','/backups/new/upload',token,archive)
         if not isinstance(result_body,dict) or result_body.get('slug')!=slug:raise ValueError('supervisor_import_unconfirmed')
@@ -361,6 +373,6 @@ def maybe_start(job,ctx):
                 last.get('recovery_request_id') == plan['recovery_request_id']):return False
         _save_state({'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
                      'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
-                     'node_id':plan['node_id'],'state':'running','reason':'stage_started','slug_hint':'','finished_at':0,'quarantine_cleanup':'not_attempted'})
+                     'node_id':plan['node_id'],'state':'running','reason':'stage_started','slug_hint':'','collision_evidence':'none','collision_checked_at':0,'finished_at':0,'quarantine_cleanup':'not_attempted'})
     threading.Thread(target=_worker,args=(plan,),name='managed-backup-supervisor-stage',daemon=True).start()
     return True

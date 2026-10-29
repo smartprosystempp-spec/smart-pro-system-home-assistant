@@ -1,3 +1,7 @@
+## 3.0.28 — Read-only collision source classification
+- A matching slug in Supervisor backup listing always blocks upload. One additional read-only GET /backups/{slug}/info (if available) classifies evidence as info_confirmed or listing_only.
+- Neither category proves identical bytes. No Restore, Delete, overwrite, new retry or cleanup authority.
+
 ## 3.0.27 — Authenticated Supervisor slug collision evidence (read-only)
 - On a Supervisor-list-confirmed collision, report the full validated backup slug alongside the existing collision reason through the same authenticated stage result; do not infer identical contents.
 - On an import with successful Supervisor info read-back, report the imported backup slug for operator traceability.
@@ -679,3 +683,8 @@ Smart Pro System 3.0.23: read-only recovery quarantine inventory. No hash rechec
 - Διορθώθηκε η πραγματική λειτουργία notify-only.
 - Προστέθηκαν ασφαλείς έλεγχοι αποτυχίας backup, update και rollback.
 - Το rollback χρησιμοποιεί το συγκεκριμένο backup slug.
+
+
+## 3.0.28 — Supervisor Duplicate Evidence Classification
+- Collision readback: list-only vs exact slug verified through read-only GET /backups/{slug}/info. Both prevent upload.
+- No content equivalence claims, no Restore, Delete or new retry authority.
