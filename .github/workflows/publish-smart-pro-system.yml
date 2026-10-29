@@ -42,10 +42,10 @@ jobs:
           context: ./smart-pro-system
           image: ${{ matrix.image }}
           image-tags: |
-            3.0.26
+            3.0.27
             latest
           push: "true"
-          version: 3.0.26
+          version: 3.0.27
 
   manifest:
     name: Publish multi-arch manifest
@@ -62,5 +62,5 @@ jobs:
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           image-name: smart-pro-system
           image-tags: |
-            3.0.26
+            3.0.27
             latest
