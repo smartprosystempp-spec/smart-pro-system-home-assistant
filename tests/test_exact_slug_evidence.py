@@ -32,7 +32,7 @@ class SlugEvidence(unittest.TestCase):
         calls=[]
         def supervisor(method,route,token,archive=None):
             calls.append((method,route))
-            return {'backups':[{'slug':SLUG}]}
+            return {'backups':[{'slug':SLUG}]} if route=='/backups' else {'slug':SLUG}
         result, archive_exists=self._run(supervisor)
         self.assertEqual(result['state'],'failed')
         self.assertEqual(result['reason'],'supervisor_slug_already_present')
@@ -40,7 +40,22 @@ class SlugEvidence(unittest.TestCase):
         self.assertEqual(result['slug_hint'],SLUG[-12:])
         self.assertEqual(result['quarantine_cleanup'],'not_attempted')
         self.assertTrue(archive_exists)
-        self.assertEqual(calls,[('GET','/backups')])
+        self.assertEqual(calls,[('GET','/backups'),('GET','/backups/'+SLUG+'/info')])
+        self.assertEqual(result['collision_evidence'],'info_confirmed')
+        self.assertGreater(result['collision_checked_at'],0)
+
+    def test_missing_info_keeps_listing_only_and_blocks_upload(self):
+        calls=[]
+        def supervisor(method,route,token,archive=None):
+            calls.append((method,route))
+            if route=='/backups':return {'backups':[{'slug':SLUG}]}
+            raise ValueError('supervisor_api_rejected')
+        result, exists=self._run(supervisor)
+        self.assertEqual(result['state'],'failed')
+        self.assertEqual(result['reason'],'supervisor_slug_already_present')
+        self.assertEqual(result['collision_evidence'],'listing_only')
+        self.assertTrue(exists)
+        self.assertEqual(len(calls),2)
 
     def test_success_readback_reports_exact_imported_slug(self):
         calls=[]
