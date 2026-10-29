@@ -1,3 +1,5 @@
+3.0.26 — Distinct, signed historical Supervisor staging after completed previous import, with strict point/request binding. No Restore/Delete.
+
 Smart Pro System 3.0.25 — read-only post-import directory evidence on existing authenticated heartbeat. No new backup, restore, Supervisor or cleanup authority.
 
 Smart Pro System 3.0.24 — bounded read-only quarantine directory survey; no archive contents, SHA-256 recheck, Supervisor queries, delete or restore.

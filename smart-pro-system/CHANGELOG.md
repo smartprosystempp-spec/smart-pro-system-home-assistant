@@ -1,3 +1,5 @@
+3.0.26 — Distinct, signed historical Supervisor staging after completed previous import, with strict point/request binding. No Restore/Delete.
+
 ## 3.0.25 — Bound Recovery Post-Import Directory Evidence (read-only)
 - An authenticated bound recovery inventory can report a bounded directory survey after the matched Supervisor stage was imported and the exact temporary archive cleanup was reported deleted.
 - The survey reads directory metadata only, never file contents, never restores or deletes.

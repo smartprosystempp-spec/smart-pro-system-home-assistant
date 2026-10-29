@@ -351,7 +351,9 @@ def maybe_start(job,ctx):
     if not plan:return False
     with _LOCK:
         last=_read_state()
-        if last.get('request_id')==plan['request_id'] or last.get('state') in ('running','imported'):return False
+        if last.get('request_id') == plan['request_id'] or last.get('state') == 'running':return False
+        if last.get('state') == 'imported' and (last.get('point_id') == plan['point_id'] or
+                last.get('recovery_request_id') == plan['recovery_request_id']):return False
         _save_state({'contract':'smart-pro-managed-backup-supervisor-stage-result-v1','request_id':plan['request_id'],
                      'recovery_request_id':plan['recovery_request_id'],'point_id':plan['point_id'],
                      'node_id':plan['node_id'],'state':'running','reason':'stage_started','slug_hint':'','finished_at':0,'quarantine_cleanup':'not_attempted'})
