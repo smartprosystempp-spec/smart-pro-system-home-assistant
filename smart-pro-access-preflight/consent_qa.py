@@ -43,40 +43,37 @@ def allow_one_attempt() -> bool:
         return True
 
 
-def same_origin(headers) -> bool:
-    """Same-origin *browser* proof, compatible with Supervisor ingress proxy.
+def strict_origin(headers) -> bool:
+    """Fail-closed browser Origin/Host check for actual account-changing POST.
 
-    Host is often an internal proxy authority rather than the origin of the
-    iframe in the browser. An exact Origin==Host remains acceptable. When
-    proxying rewrites Host, require the browser-only Sec-Fetch-Site header to
-    say same-origin. Cross-site or same-site fetches always fail closed.
-
-    This is defense in depth alongside independent trusted Supervisor socket
-    peer, fresh Core admin readback, and the one-use CSRF+identity token. Never
-    treat browser-supplied forwarding headers as proof.
+    The HA 0.3.2 live probe confirmed browser fetch gives valid Origin, same
+    incoming Host, and custom action header. The optional Sec-Fetch-Site header
+    is missing and therefore MUST NOT be required. A supplied cross-site or
+    same-site value, however, is actively rejected.
     """
-    origin = headers.get("Origin", "")
-    host = headers.get("Host", "")
-    site = headers.get("Sec-Fetch-Site", "")
-    if not isinstance(origin, str) or not isinstance(host, str) or not isinstance(site, str):
+    values = {}
+    for name in ('Origin','Host','Sec-Fetch-Site','X-Smart-Pro-QA-Action'):
+        matches = [v for k,v in headers.items() if str(k).lower() == name.lower()]
+        if (name != 'Sec-Fetch-Site' and len(matches) != 1 or
+            name == 'Sec-Fetch-Site' and len(matches) > 1):
+            return False
+        values[name] = matches[0] if matches else None
+    origin, host = values['Origin'], values['Host']
+    site, action = values['Sec-Fetch-Site'], values['X-Smart-Pro-QA-Action']
+    if not isinstance(origin,str) or not isinstance(host,str) or action != 'v1':
         return False
-    if site and site != "same-origin":
+    if site is not None and site != 'same-origin':
         return False
-    if not host or any(c in host for c in "\r\n /\t"):
+    if not host or any(c in host for c in '\r\n /\t'):
         return False
     try:
         parsed = urlsplit(origin)
     except ValueError:
         return False
-    if (parsed.scheme not in ("http", "https") or not parsed.hostname or
-            not parsed.netloc or parsed.username or parsed.password or
-            parsed.path or parsed.query or parsed.fragment or
-            origin != parsed.scheme + "://" + parsed.netloc):
-        return False
-    # A browser may see HA's public origin while the add-on sees the ingress
-    # container Host. Only the non-forgeable browser Fetch Metadata can bridge
-    # that discrepancy; without it, an exact Origin/Host match is required.
-    return origin == parsed.scheme + "://" + host or site == "same-origin"
+    return bool(parsed.scheme in ('http','https') and parsed.netloc == host and
+                parsed.hostname and not parsed.username and not parsed.password and
+                not parsed.path and not parsed.query and not parsed.fragment and
+                origin == parsed.scheme + '://' + host)
 
 
 def attempted() -> bool:

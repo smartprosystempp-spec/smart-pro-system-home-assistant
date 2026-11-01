@@ -88,7 +88,7 @@ class PolicyTests(unittest.TestCase):
 
     def test_no_sensitive_portal_grant_wording(self):
         body = app.render_page(verify()).decode()
-        self.assertIn("Κανένας χρήστης δεν δημιουργήθηκε", body)
+        self.assertIn("Η εμφάνιση της σελίδας δεν δημιουργεί λογαριασμό", body)
 
     def test_admin_only_core_read_permission(self):
         cfg = (BASE / "smart-pro-access-preflight" / "config.yaml").read_text()
@@ -146,13 +146,13 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.3.2", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.3.3", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):
         status, body, _ = self.request("/", method="POST")
         self.assertEqual(status, 405)
-        self.assertEqual(body, b"NO USER WRITES")
+        self.assertEqual(body, b"Unsupported action")
 
     def test_http_unknown_route_404(self):
         status, _, _ = self.request("/admin/create-user")

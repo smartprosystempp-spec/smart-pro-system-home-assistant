@@ -1,6 +1,6 @@
 name: "Smart Pro Access Preflight — QA"
-description: "Ασφαλής διάγνωση υποβολής Home Assistant Ingress. Δημιουργία/διαγραφή χρηστών απενεργοποιημένη."
-version: "0.3.2"
+description: "Ελεγχόμενη δοκιμή ταυτότητας admin και εφάπαξ δημιουργίας/άμεσης διαγραφής QA χρήστη χωρίς login."
+version: "0.3.3"
 slug: "smart_pro_access_preflight_qa"
 arch:
   - amd64

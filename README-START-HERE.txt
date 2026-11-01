@@ -1,8 +1,14 @@
-SMART PRO ACCESS PREFLIGHT 0.3.2 - SAFE ORIGIN METADATA DIAGNOSTIC
-Changed-files ZIP for EXISTING GitHub repository (not an installable HA ZIP).
-Extract all. Upload preserving paths. Do NOT replace root README.md or repository.yaml.
-Update ONLY the QA app in test Home Assistant. Do NOT run Publish workflows.
-The QA app has NO active user-create/delete route in 0.3.2.
-Admin: open UI, click ONE "Έλεγχος υποβολής χωρίς δημιουργία χρήστη"
-Then send screenshot of safe fixed classification codes only.
-No tokens, actual URLs, credentials, or console/network dumps.
+SMART PRO ACCESS PREFLIGHT — 0.3.3 / CONTROLLED TEST-ONLY QA
+Changed-files ZIP for EXISTING GitHub repository, NOT a standalone HA ZIP.
+Extract all. Upload preserving folders: docs/ smart-pro-access-preflight/ tests/
+and the two root TXT files. Do not overwrite root README.md or repository.yaml.
+No publish workflow; update only Smart Pro Access Preflight QA on TEST Home Assistant.
+The current 0.3.2 live diagnostic showed Origin valid, Origin/Host same,
+custom header yes, Sec-Fetch-Site missing. The new write route requires strict
+Origin/Host matching AND special browser header AND one-time administrator consent.
+
+FIRST LIVE QA: open as admin, click ONLY green read-only probe.
+DO NOT type ΔΟΚΙΜΗ or click blue create/delete until after review of that result.
+If later approved for actual one-shot test, inspect Home Assistant Users screen
+before and after any attempt for Smart Pro QA TEMP NO LOGIN accounts.
+Never post raw HA URLs, tokens, cookies, passwords or user IDs.

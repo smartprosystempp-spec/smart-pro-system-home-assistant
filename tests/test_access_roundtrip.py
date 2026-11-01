@@ -141,21 +141,36 @@ class ConsentTests(unittest.TestCase):
     def test_once_per_process(self):
         self.assertTrue(consent_qa.allow_one_attempt())
         self.assertFalse(consent_qa.allow_one_attempt())
-    def test_origin(self):
-        self.assertTrue(consent_qa.same_origin({'Origin':'https://ha.example:8123','Host':'ha.example:8123'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example'}))
-        self.assertFalse(consent_qa.same_origin({'Host':'ha.example'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'null','Host':'ha.example'}))
-        self.assertTrue(consent_qa.same_origin({'Origin':'https://ha.example:8123','Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example','Sec-Fetch-Site':'cross-site'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example','Sec-Fetch-Site':'same-site'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'https://ha.example','Host':'supervisor:8107','Sec-Fetch-Site':'none'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'null','Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
-        self.assertFalse(consent_qa.same_origin({'Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
-        self.assertFalse(consent_qa.same_origin({'Origin':'https://ha.example','Host':'supervisor:8107'}))
+    def test_strict_origin_from_real_ingress_metadata(self):
+        self.assertTrue(consent_qa.strict_origin({'Origin':'https://ha.example:8123',
+            'Host':'ha.example:8123','X-Smart-Pro-QA-Action':'v1'}))
+        self.assertTrue(consent_qa.strict_origin({'Origin':'https://ha.example',
+            'Host':'ha.example','X-Smart-Pro-QA-Action':'v1','Sec-Fetch-Site':'same-origin'}))
+    def test_cross_origin_mismatch(self):
+        self.assertFalse(consent_qa.strict_origin({'Origin':'https://evil.example',
+            'Host':'ha.example','X-Smart-Pro-QA-Action':'v1'}))
+    def test_fetch_site_when_supplied_is_strict(self):
+        for site in ('cross-site','same-site','none','other'):
+            with self.subTest(site=site):
+                self.assertFalse(consent_qa.strict_origin({'Origin':'https://ha.example',
+                    'Host':'ha.example','X-Smart-Pro-QA-Action':'v1','Sec-Fetch-Site':site}))
+    def test_duplicate_origin_or_host_denied(self):
+        class Multi:
+            def items(self):return [('Origin','https://ha.example'),('Origin','https://ha.example'),
+                ('Host','ha.example'),('X-Smart-Pro-QA-Action','v1')]
+        self.assertFalse(consent_qa.strict_origin(Multi()))
+    def test_missing_action_or_origin_denied(self):
+        self.assertFalse(consent_qa.strict_origin({'Origin':'https://ha.example','Host':'ha.example'}))
+        self.assertFalse(consent_qa.strict_origin({'Host':'ha.example','X-Smart-Pro-QA-Action':'v1'}))
+    def test_null_origin_denied(self):
+        self.assertFalse(consent_qa.strict_origin({'Origin':'null','Host':'ha.example',
+            'X-Smart-Pro-QA-Action':'v1'}))
+    def test_browser_fetch_metadata_missing_is_allowed_with_other_proof(self):
+        self.assertTrue(consent_qa.strict_origin({'Origin':'https://ha.example',
+            'Host':'ha.example','X-Smart-Pro-QA-Action':'v1'}))
 
 class HttpLiveGuardTests(unittest.TestCase):
-    """All actual HTTP routes are strictly no-write in 0.3.2."""
+    """Real localhost HTTP server, mocked Core authority/writer. NO live HA writes."""
     @classmethod
     def setUpClass(cls):
         cls.server=app.Server(('127.0.0.1',0),app.Handler)
@@ -165,112 +180,171 @@ class HttpLiveGuardTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown();cls.server.server_close();cls.thread.join(5)
+    def setUp(self):
+        with consent_qa._lock:
+            consent_qa._issued.clear(); consent_qa._attempted=False
 
-    def request(self, method='POST', path='/origin-check', extra=None, body=''):
-        h={'Origin':'https://ha.example','Content-Type':'application/x-www-form-urlencoded',
-           'X-Remote-User-Id':USER,'X-Remote-User-Groups':'system-admin'}
-        if extra: h.update(extra)
+    def request(self, method='POST', path='/account-roundtrip', extra=None, body=None,
+                origin='valid'):
+        urlhost=f'127.0.0.1:{self.port}'
+        h={'Content-Type':'application/json',
+           'X-Remote-User-Id':USER,'X-Remote-User-Groups':'system-admin',
+           'X-Smart-Pro-QA-Action':'v1'}
+        if origin == 'valid':h['Origin']='http://'+urlhost
+        elif origin == 'invalid':h['Origin']='https://evil.example'
+        if extra:h.update(extra)
+        if body is None:
+            body=json.dumps({'csrf':consent_qa.issue(USER),'confirm':'ΔΟΚΙΜΗ'},separators=(',',':'))
         conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=3)
-        conn.request(method,path,body=body,headers=h)
-        res=conn.getresponse();data=res.read();headers=res.getheaders();status=res.status
-        conn.close();return status,data,dict(headers)
+        conn.request(method,path,body=body.encode('utf-8') if isinstance(body,str) else body,headers=h)
+        res=conn.getresponse();data=res.read();status=res.status;headers=dict(res.getheaders())
+        conn.close();return status,data,headers
 
-    def test_no_writer_imported(self):
-        self.assertFalse(hasattr(app,'run_qa_roundtrip'))
-        self.assertNotIn('account_roundtrip',app.__dict__)
-        self.assertNotIn('consent_qa',app.__dict__)
-
-    def test_privileged_write_request_permanently_disabled(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}):
-            for method in ('POST','PUT','PATCH','DELETE'):
-                with self.subTest(method=method):
-                    status,body,_=self.request(method=method,path='/')
-                    self.assertEqual(status,405)
-                    self.assertEqual(body,b'NO USER WRITES')
-
-    def test_direct_unauthenticated_probe_denied(self):
-        status,body,_=self.request(path='/origin-check')
-        self.assertEqual(status,403)
-        self.assertIn(b'Administrator required',body)
-
-    def test_nonadmin_probe_denied(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':False,'reason':'non_admin'}):
-            status,body,_=self.request(path='/origin-check')
+    def test_actual_direct_socket_rejected_even_with_forged_headers(self):
+        with patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(extra={'X-Forwarded-For':'172.30.32.2'})
             self.assertEqual(status,403)
-            self.assertIn(b'Administrator required',body)
+            writer.assert_not_called()
 
-    def test_real_local_http_probe_responds_only_sanitized_categories(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}):
-            status,body,_=self.request(extra={'Sec-Fetch-Site':'same-origin',
-                'X-Smart-Pro-QA-Probe':'v1','Content-Type':'application/json'},body='{"probe":"metadata-v1"}')
+    def test_nonadmin_denied(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':False,'reason':'non_admin'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request()
+            self.assertEqual(status,403);writer.assert_not_called()
+
+    def test_valid_core_admin_consent_and_browser_fetch_can_write_exactly_once(self):
+        token=consent_qa.issue(USER)
+        payload=json.dumps({'csrf':token,'confirm':'ΔΟΚΙΜΗ'},ensure_ascii=False)
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip',return_value='qa_account_created_verified_deleted') as writer:
+            status,body,headers=self.request(body=payload)
             self.assertEqual(status,200)
-            response=json.loads(body)
-            self.assertEqual(response['code'],'request_metadata_observed_no_write')
-            self.assertEqual(response['origin'],'valid')
-            self.assertEqual(response['fetch_site'],'same-origin')
-            self.assertEqual(response['custom_header'],'yes')
-            self.assertNotIn(b'https://ha.example',body)
-            self.assertNotIn(USER.encode(),body)
+            self.assertIn('application/json',headers['Content-Type'])
+            self.assertEqual(json.loads(body),{'code':'qa_account_created_verified_deleted'})
+            writer.assert_called_once()
+            status,_,_=self.request(body=payload)
+            self.assertEqual(status,403);writer.assert_called_once()
 
-    def test_html_form_fallback_is_read_only(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}):
+    def test_second_distinct_token_after_first_attempt_is_denied(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip',return_value='qa_account_created_verified_deleted') as writer:
+            status,_,_=self.request()
+            self.assertEqual(status,200)
+            status,_,_=self.request()
+            self.assertEqual(status,409);writer.assert_called_once()
+
+    def test_origin_mismatch_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,body,_=self.request(origin='invalid')
+            self.assertEqual(status,403); self.assertIn(b'origin_gate_denied_no_write',body)
+            writer.assert_not_called()
+
+    def test_cross_site_fetch_metadata_denied(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(extra={'Sec-Fetch-Site':'cross-site'})
+            self.assertEqual(status,403);writer.assert_not_called()
+
+    def test_missing_origin_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(origin='absent')
+            self.assertEqual(status,403);writer.assert_not_called()
+
+    def test_absent_action_header_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(extra={'X-Smart-Pro-QA-Action':''})
+            self.assertEqual(status,403);writer.assert_not_called()
+
+    def test_native_html_form_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(extra={'Content-Type':'application/x-www-form-urlencoded'},body='csrf=x&confirm=x')
+            self.assertIn(status,(400,403));writer.assert_not_called()
+
+    def test_missing_csrf_or_wrong_phrase_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(body='{"csrf":"bad","confirm":"ΔΟΚΙΜΗ"}')
+            self.assertEqual(status,403)
+            status,_,_=self.request(body=json.dumps({'csrf':consent_qa.issue(USER),'confirm':'INVALID'}))
+            self.assertEqual(status,403);writer.assert_not_called()
+
+    def test_invalid_json_or_extra_fields_no_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            for body in ('not json','{"csrf":1,"confirm":"ΔΟΚΙΜΗ"}',
+                         '{"csrf":"abc","confirm":"ΔΟΚΙΜΗ","extra":true}',
+                         'x'*513):
+                with self.subTest(body=body[:20]):
+                    status,_,_=self.request(body=body)
+                    self.assertEqual(status,400)
+            writer.assert_not_called()
+
+    def test_unsupported_url_and_methods_denied(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,_,_=self.request(path='/')
+            self.assertEqual(status,405)
+            for method in ('PUT','PATCH','DELETE'):
+                status,_,_=self.request(method=method)
+                self.assertEqual(status,405)
+            writer.assert_not_called()
+
+    def test_read_only_probe_still_works_without_sec_fetch_site(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            status,body,_=self.request(path='/origin-check',
+                 extra={'X-Smart-Pro-QA-Probe':'v1'},body='{"probe":"metadata-v1"}')
+            self.assertEqual(status,200)
+            result=json.loads(body)
+            self.assertEqual(result['code'],'request_metadata_observed_no_write')
+            self.assertEqual(result['origin'],'valid')
+            self.assertEqual(result['origin_host'],'same')
+            self.assertEqual(result['fetch_site'],'missing')
+            self.assertEqual(result['custom_header'],'yes')
+            writer.assert_not_called()
+
+    def test_no_js_fallback_cannot_create(self):
+        html=app.render_page({'is_admin':True,'reason':'ok'},consent_token='testtoken').decode()
+        self.assertIn('src="probe.js"',html)
+        self.assertIn('action="account-roundtrip"',html)
+        self.assertNotIn(USER,html)
+        self.assertIn('ΔΟΚΙΜΗ',html)
+        js=(ROOT/'smart-pro-access-preflight/probe.js').read_text()
+        self.assertIn("mode: 'same-origin'",js)
+        self.assertIn('event.preventDefault()',js)
+        self.assertIn('X-Smart-Pro-QA-Action',js)
+        self.assertNotIn('config/auth/create',js)
+
+    def test_uncertain_writer_result_not_misreported_as_success(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip',side_effect=qa.RoundTripError('cleanup_uncertain_check_users')):
             status,body,_=self.request()
             self.assertEqual(status,200)
-            self.assertIn(b'request_metadata_observed_no_write',body)
-            self.assertNotIn(b'config/auth/create',body)
+            self.assertEqual(json.loads(body),{'code':'cleanup_uncertain_check_users'})
 
-    def test_nobody_can_post_account_creation_even_with_forged_headers(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}):
-            status,body,_=self.request(path='/',extra={'Sec-Fetch-Site':'same-origin',
-              'X-Smart-Pro-QA-Probe':'v1','X-Forwarded-For':'172.30.32.2'},
-              body='csrf=fake&confirm=somevalue')
-            self.assertEqual(status,405)
-            self.assertEqual(body,b'NO USER WRITES')
+    def test_busy_action_does_not_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
+             patch.object(app,'run_qa_roundtrip') as writer:
+            app.ROUND_TRIP_LOCK.acquire()
+            try:
+                status,_,_=self.request()
+                self.assertEqual(status,409); writer.assert_not_called()
+            finally: app.ROUND_TRIP_LOCK.release()
 
-    def test_get_script_denied_untrusted_peer(self):
-        status,body,_=self.request(method='GET',path='/probe.js')
-        self.assertEqual(status,403)
-        self.assertEqual(body,b'Forbidden')
+    def test_qa_docker_includes_only_expected_writer_module(self):
+        d=(ROOT/'smart-pro-access-preflight/Dockerfile').read_text()
+        self.assertIn('COPY account_roundtrip.py',d)
+        self.assertIn('COPY consent_qa.py',d)
+        self.assertIn('COPY probe.js',d)
+        self.assertNotIn('COPY smart-pro-system',d)
 
-    def test_no_side_effect_on_malformed_post(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}):
-            status,_,_=self.request(path='/origin-check',body='x'*257)
-            self.assertEqual(status,400)
-
-    def test_safe_same_origin_script_is_local_and_bounded(self):
-        self.assertLess(len(app.SCRIPT_BYTES),12000)
-        self.assertIn(b'X-Smart-Pro-QA-Probe',app.SCRIPT_BYTES)
-        self.assertNotIn(b'config/auth/create',app.SCRIPT_BYTES)
-        html=app.render_page({'is_admin':True,'reason':'verified'}).decode()
-        self.assertIn('src="probe.js"',html)
-        self.assertNotIn('Έγκριση ελεγχόμενης δοκιμής',html)
-
-    def test_weak_meta_cannot_turn_into_authority(self):
-        s=app.classify_request_metadata({'Origin':'null','Host':'supervisor',
-             'Sec-Fetch-Site':'cross-site','X-Smart-Pro-QA-Probe':'v1'})
-        self.assertEqual(s['origin'],'null')
-        self.assertEqual(s['fetch_site'],'cross-site')
-        self.assertEqual(s['origin_host'],'unknown')
-        self.assertNotIn('is_admin',s)
-
-    def test_nonadmin_page_has_no_form(self):
+    def test_no_nonadmin_forms(self):
         html=app.render_page({'is_admin':False,'reason':'non_admin'}).decode()
+        self.assertNotIn('account-roundtrip-form',html)
         self.assertNotIn('origin-probe-form',html)
-
-    def test_duplicate_and_unexpected_headers_are_classified(self):
-        class Multi:
-            def items(self):
-                return [('Origin','https://a.example'),('Origin','https://b.example'),
-                        ('Host','supervisor'),('Sec-Fetch-Site','custom-value')]
-        result=app.classify_request_metadata(Multi())
-        self.assertEqual(result['origin'],'missing')
-        self.assertEqual(result['fetch_site'],'other')
-
-    def test_docker_excludes_qa_account_writer(self):
-        image=(ROOT/'smart-pro-access-preflight'/'Dockerfile').read_text()
-        self.assertNotIn('COPY account_roundtrip.py',image)
-        self.assertNotIn('COPY consent_qa.py',image)
-        self.assertIn('COPY probe.js',image)
-
 
 if __name__=='__main__':unittest.main()
