@@ -1,5 +1,5 @@
 FROM python:3.13-alpine
-ARG BUILD_VERSION=0.3.1
+ARG BUILD_VERSION=0.3.2
 ARG BUILD_ARCH=amd64
 LABEL io.hass.version="${BUILD_VERSION}" \
       io.hass.type="app" \
@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /opt/smart-pro-access-qa
 COPY app.py /opt/smart-pro-access-qa/app.py
 COPY ha_readback.py /opt/smart-pro-access-qa/ha_readback.py
-COPY consent_qa.py account_roundtrip.py /opt/smart-pro-access-qa/
+COPY probe.js /opt/smart-pro-access-qa/probe.js
 RUN chmod 0444 /opt/smart-pro-access-qa/*.py \
   && addgroup -S qauser && adduser -S qauser -G qauser
 USER qauser

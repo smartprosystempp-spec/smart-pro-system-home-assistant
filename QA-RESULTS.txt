@@ -1,22 +1,19 @@
-SMART PRO ACCESS PREFLIGHT — 0.3.1 / STAGE 7 / INTERNAL QA
+SMART PRO ACCESS PREFLIGHT — 0.3.2 / STAGE 8 / INTERNAL QA
 ==========================================================
 Date: 2026-11-01
-Base: Live-tested 0.3.0 (admin accepted, non-admin rejected; write POST blocked with Invalid request origin before invoking create).
-
-Cause: Browser Origin may differ from proxy Host behind Home Assistant Ingress.
-Fix: Keep Origin validation plus browser Sec-Fetch-Site: same-origin, with fail-closed treatment of cross-site/same-site/null/missing Origin.
-Added: POST /origin-check read-only preflight; it cannot run account creation or deletion.
-Added: Friendly on-page 403 diagnostic rather than plain-text black iframe.
-Python compile: PASS
-Pure unit + local HTTP tests: PASS (98/98)
-Static checks: PASS
-Zip structure and integrity: PASS
-Docker/HA Supervisor runtime build: NOT PERFORMED INTERNALLY
-Real Home Assistant 0.3.1 origin probe: PENDING
-Live user CREATE / DELETE: NOT PERFORMED IN 0.3.0; DO NOT RETRY before read-only 0.3.1 test.
-Original Smart Pro System 3.0.28, Managed Support 3.19.2, Tunnel, Portal: NO CHANGES.
-
-First live step: Update only QA add-on, then click only
-"1. Έλεγχος φόρμας χωρίς δημιουργία χρήστη"
-Expected: origin_probe_passed_no_write, without creation or deletion.
-NEVER share ingress URLs, session cookies or tokens.
+Base: Verified, currently deployed 0.3.1; local source Git blob matched GitHub at start.
+Live 0.3.1 observation: origin_proof_rejected_no_write (no account created).
+New purpose: report sanitized request metadata to identify the proxy/browser mismatch.
+Safe preflight: independent Supervisor/Core administrator proof still required.
+Account creation/deletion: DISABLED AT RUNTIME; privileged POST / always 405.
+Docker image: neither account_roundtrip.py nor consent_qa.py copied.
+No tokens, cookies, raw headers, URLs or user IDs returned or logged.
+Python unit and real localhost HTTP simulated tests: 99/99 PASS.
+Python compile: PASS. JavaScript syntax (node --check): PASS.
+Container metadata config syntax/consistency: PASS.
+Docker/HA Supervisor build: NOT PERFORMED internally.
+Home Assistant Live 0.3.2 browser metadata: NOT YET TESTED.
+Existing add-ons, Portal, Managed Support/Tunnel, main repository README: NOT MODIFIED.
+STOP: do not attempt any actual user create/delete with this version.
+First live QA: update QA app only, open as admin, click one read-only probe,
+share screenshot of the five fixed classification fields only.

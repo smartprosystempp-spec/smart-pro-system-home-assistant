@@ -146,13 +146,13 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.3.1", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.3.2", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):
         status, body, _ = self.request("/", method="POST")
-        self.assertEqual(status, 403)
-        self.assertEqual(body, b"Administrator verification required")
+        self.assertEqual(status, 405)
+        self.assertEqual(body, b"NO USER WRITES")
 
     def test_http_unknown_route_404(self):
         status, _, _ = self.request("/admin/create-user")
@@ -160,7 +160,7 @@ class RealLocalHttpTests(unittest.TestCase):
 
     def test_http_delete_denied(self):
         status, _, _ = self.request("/", method="DELETE")
-        self.assertEqual(status, 403)
+        self.assertEqual(status, 405)
 
 
 if __name__ == "__main__":
