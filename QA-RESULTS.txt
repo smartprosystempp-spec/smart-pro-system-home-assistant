@@ -1,24 +1,26 @@
-SMART PRO ACCESS PREFLIGHT 0.4.0 / INTERNAL QA
+SMART PRO ACCESS PREFLIGHT 0.5.0 / INTERNAL QA
 Date: 2026-11-01
-Source baseline: exact live GitHub 0.3.3 blobs, 8/8 matched.
-Scope: Test HA ONLY, retained Core admin WITHOUT login credentials.
+Baseline: exact LIVE GitHub 0.4.0 source 9/9 blob hashes matched.
+Scope: lab-only, local-only TEST Home Assistant credentials and revocation.
 
-Internal Python tests / real local socket HTTP / simulated Core sessions:
-120/120 PASS
-JavaScript syntax (node --check): PASS
-Python compilation / AST: PASS
-Config/Dockerfile/runtime version and write-path consistency: PASS
-No auth-provider password/credential writer: PASS
-Legacy temporary account roundtrip regression: PASS
-Create/revoke separate approval scopes + anti-replay: PASS
-Root README and repository.yaml unchanged: PASS
-Package changed-file allowlist and ZIP integrity: PASS
-Docker build inside Home Assistant / Supervisor: NOT TESTED internally
-Real Home Assistant 0.4.0 installation / account retention/revocation: NOT YET TESTED
+Isolated Python unit + real localhost HTTP tests: 145/145 PASS
+Python AST / py_compile: PASS
+Node.js JavaScript syntax: PASS
+Credential create/attach/readback/revoke fake Core scenarios: PASS
+Fail-closed direct network / forged origin / wrong approval / replay tests: PASS
+Independent lab_create / lab_revoke consent 180s: PASS
+Password generated via Python secrets.token_urlsafe(36): PASS
+No plaintext password in application files, logs, Portal or persistence: PASS (code checks)
+No Docker publication, no changes to other Smart Pro add-ons: PASS (package allow-list)
+Zip integrity, no duplicate paths: PASS
+Real HA 0.5.0 credential create, actual login and revoke: PENDING LIVE QA
 
-LIVE 0.3.3 earlier: create/verify/delete qa_account_created_verified_deleted PASS.
-Next 0.4.0: first live checkpoint is ONLY opening UI (no account creation).
-The next test can create a real ADMIN USER RECORD that persists in HA,
-but without credentials there is NO LOGIN capability yet. This does NOT
-grant actual remote Smart Pro access or modify Portal, Managed or Tunnel.
-If any result is uncertain, inspect Users and do NOT retry.
+Security boundaries: HA admin auth through Ingress plus fresh Core user inventory;
+role pinned system-admin, local_only true, non-owner, exact QA lab name;
+password shown once to HA admin browser. No vault / Portal / remote Smart Pro access.
+If provisioning outcome is uncertain: inspect HA Users and DO NOT retry.
+The optional older QA lifecycle is NOT reissued fresh approval tokens in the 0.5.0 UI.
+
+Live test first action: open new UI and provide screenshot WITHOUT password.
+Then separately approve one lab account creation, local login, and full revocation.
+DO NOT SHARE PASSWORD IN CHATS OR SCREENSHOTS. NEVER install in production.

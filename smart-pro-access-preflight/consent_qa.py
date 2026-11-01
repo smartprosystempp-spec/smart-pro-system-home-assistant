@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 
 APPROVAL_WORD = "ΔΗΜΙΟΥΡΓΙΑ"
 REVOKE_WORD = "ΑΝΑΚΛΗΣΗ"
+LAB_CREATE_WORD = "ΣΥΝΔΕΣΗ"
+LAB_REVOKE_WORD = "ΔΙΑΓΡΑΦΗ"
 WINDOW_SEC = 180
 _lock = threading.RLock()
 _issued = {}
@@ -15,7 +17,7 @@ _attempted = set()
 
 
 def issue(user_id: str, now=None, *, action="create") -> str:
-    if action not in ("create", "revoke") or not isinstance(user_id, str):
+    if action not in ("create", "revoke", "lab_create", "lab_revoke") or not isinstance(user_id, str):
         raise ValueError("invalid QA approval scope")
     now = time.monotonic() if now is None else now
     with _lock:
@@ -29,18 +31,19 @@ def issue(user_id: str, now=None, *, action="create") -> str:
 
 def consume(token: str, user_id: str, confirmation: str, *, action="create", now=None) -> bool:
     now = time.monotonic() if now is None else now
-    if not isinstance(token, str) or len(token) > 128 or action not in ("create", "revoke"):
+    if not isinstance(token, str) or len(token) > 128 or action not in ("create", "revoke", "lab_create", "lab_revoke"):
         return False
     with _lock:
         row = _issued.pop(token, None)
-        expected = APPROVAL_WORD if action == "create" else REVOKE_WORD
+        expected = {"create":APPROVAL_WORD, "revoke":REVOKE_WORD,
+                    "lab_create":LAB_CREATE_WORD, "lab_revoke":LAB_REVOKE_WORD}[action]
         return bool(row and row[1] >= now and row[2] == action
                     and hmac.compare_digest(row[0], user_id)
                     and confirmation == expected)
 
 
 def allow_one_attempt(action="create") -> bool:
-    if action not in ("create", "revoke"):
+    if action not in ("create", "revoke", "lab_create", "lab_revoke"):
         return False
     with _lock:
         if action in _attempted:

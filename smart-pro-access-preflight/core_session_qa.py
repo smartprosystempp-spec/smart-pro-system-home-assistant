@@ -17,7 +17,8 @@ class RoundTripError(RuntimeError):
 class SupervisorCoreSession:
     """Single privileged WebSocket, command allow-list, no secrets in logs."""
 
-    ALLOWED = {"config/auth/list", "config/auth/create", "config/auth/delete"}
+    ALLOWED = {"config/auth/list", "config/auth/create", "config/auth/delete",
+               "config/auth_provider/homeassistant/create"}
 
     def __init__(self, supervisor_token: str, timeout: float = DEFAULT_TIMEOUT,
                  connect: Callable = socket.create_connection):

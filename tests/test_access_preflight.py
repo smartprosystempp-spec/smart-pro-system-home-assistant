@@ -146,7 +146,7 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.4.0", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.5.0", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):
