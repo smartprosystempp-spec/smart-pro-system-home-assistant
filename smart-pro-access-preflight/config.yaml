@@ -1,6 +1,6 @@
 name: "Smart Pro Access Preflight — QA"
-description: "Ελεγχόμενη δοκιμή ταυτότητας admin και εφάπαξ δημιουργίας/άμεσης διαγραφής QA χρήστη χωρίς login."
-version: "0.3.3"
+description: "Ελεγχόμενη δοκιμή ταυτότητας admin και ελεγχόμενης δημιουργίας/διατήρησης και ανάκλησης QA διαχειριστή χωρίς login."
+version: "0.4.0"
 slug: "smart_pro_access_preflight_qa"
 arch:
   - amd64

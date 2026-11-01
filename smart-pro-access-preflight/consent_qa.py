@@ -6,40 +6,46 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-APPROVAL_WORD = "ΔΟΚΙΜΗ"
+APPROVAL_WORD = "ΔΗΜΙΟΥΡΓΙΑ"
+REVOKE_WORD = "ΑΝΑΚΛΗΣΗ"
 WINDOW_SEC = 180
 _lock = threading.RLock()
 _issued = {}
-_attempted = False
+_attempted = set()
 
 
-def issue(user_id: str, now=None) -> str:
+def issue(user_id: str, now=None, *, action="create") -> str:
+    if action not in ("create", "revoke") or not isinstance(user_id, str):
+        raise ValueError("invalid QA approval scope")
     now = time.monotonic() if now is None else now
     with _lock:
         for key in list(_issued):
-            if _issued[key][1] < now or _issued[key][0] == user_id:
+            if _issued[key][1] < now or (_issued[key][0] == user_id and _issued[key][2] == action):
                 del _issued[key]
         key = secrets.token_urlsafe(32)
-        _issued[key] = (user_id, now + WINDOW_SEC)
+        _issued[key] = (user_id, now + WINDOW_SEC, action)
         return key
 
 
-def consume(token: str, user_id: str, confirmation: str, *, now=None) -> bool:
+def consume(token: str, user_id: str, confirmation: str, *, action="create", now=None) -> bool:
     now = time.monotonic() if now is None else now
-    if not isinstance(token, str) or len(token) > 128:
+    if not isinstance(token, str) or len(token) > 128 or action not in ("create", "revoke"):
         return False
     with _lock:
         row = _issued.pop(token, None)
-        return bool(row and row[1] >= now and hmac.compare_digest(row[0], user_id)
-                    and confirmation == APPROVAL_WORD)
+        expected = APPROVAL_WORD if action == "create" else REVOKE_WORD
+        return bool(row and row[1] >= now and row[2] == action
+                    and hmac.compare_digest(row[0], user_id)
+                    and confirmation == expected)
 
 
-def allow_one_attempt() -> bool:
-    global _attempted
+def allow_one_attempt(action="create") -> bool:
+    if action not in ("create", "revoke"):
+        return False
     with _lock:
-        if _attempted:
+        if action in _attempted:
             return False
-        _attempted = True
+        _attempted.add(action)
         return True
 
 
@@ -76,6 +82,6 @@ def strict_origin(headers) -> bool:
                 origin == parsed.scheme + '://' + host)
 
 
-def attempted() -> bool:
+def attempted(action="create") -> bool:
     with _lock:
-        return _attempted
+        return action in _attempted

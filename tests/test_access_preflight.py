@@ -88,7 +88,7 @@ class PolicyTests(unittest.TestCase):
 
     def test_no_sensitive_portal_grant_wording(self):
         body = app.render_page(verify()).decode()
-        self.assertIn("Η εμφάνιση της σελίδας δεν δημιουργεί λογαριασμό", body)
+        self.assertIn("Το άνοιγμα της σελίδας δεν δημιουργεί λογαριασμό", body)
 
     def test_admin_only_core_read_permission(self):
         cfg = (BASE / "smart-pro-access-preflight" / "config.yaml").read_text()
@@ -146,7 +146,7 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.3.3", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.4.0", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):

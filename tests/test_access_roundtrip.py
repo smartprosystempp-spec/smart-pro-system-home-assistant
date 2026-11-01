@@ -1,4 +1,4 @@
-"""QA 0.3.0: consent, fixed Core command allow-list, create+revoke rollback.
+"""Historical QA 0.3.3 module regression: consent, fixed Core command allow-list, create+revoke rollback.
 No real Home Assistant operations are performed in this test module.
 """
 import http.client
@@ -118,26 +118,26 @@ class ConsentTests(unittest.TestCase):
     def setUp(self):
         with consent_qa._lock:
             consent_qa._issued.clear()
-            consent_qa._attempted=False
+            consent_qa._attempted=set()
     def test_one_time(self):
         token=consent_qa.issue(USER,now=100.0)
-        self.assertTrue(consent_qa.consume(token,USER,'ΔΟΚΙΜΗ',now=101.0))
-        self.assertFalse(consent_qa.consume(token,USER,'ΔΟΚΙΜΗ',now=101.0))
+        self.assertTrue(consent_qa.consume(token,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=101.0))
+        self.assertFalse(consent_qa.consume(token,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=101.0))
     def test_expired(self):
         token=consent_qa.issue(USER,now=100.0)
-        self.assertFalse(consent_qa.consume(token,USER,'ΔΟΚΙΜΗ',now=281.0))
+        self.assertFalse(consent_qa.consume(token,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=281.0))
     def test_other_user(self):
         token=consent_qa.issue(USER,now=100.0)
-        self.assertFalse(consent_qa.consume(token,'a'*32,'ΔΟΚΙΜΗ',now=101.0))
+        self.assertFalse(consent_qa.consume(token,'a'*32,'ΔΗΜΙΟΥΡΓΙΑ',now=101.0))
     def test_wrong_phrase(self):
         token=consent_qa.issue(USER,now=100.0)
         self.assertFalse(consent_qa.consume(token,USER,'δοκιμή',now=101.0))
-        self.assertFalse(consent_qa.consume(token,USER,'ΔΟΚΙΜΗ',now=102.0))
+        self.assertFalse(consent_qa.consume(token,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=102.0))
     def test_refresh_invalidates_old(self):
         t1=consent_qa.issue(USER,now=100.0)
         t2=consent_qa.issue(USER,now=120.0)
-        self.assertFalse(consent_qa.consume(t1,USER,'ΔΟΚΙΜΗ',now=121.0))
-        self.assertTrue(consent_qa.consume(t2,USER,'ΔΟΚΙΜΗ',now=121.0))
+        self.assertFalse(consent_qa.consume(t1,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=121.0))
+        self.assertTrue(consent_qa.consume(t2,USER,'ΔΗΜΙΟΥΡΓΙΑ',now=121.0))
     def test_once_per_process(self):
         self.assertTrue(consent_qa.allow_one_attempt())
         self.assertFalse(consent_qa.allow_one_attempt())
@@ -169,182 +169,15 @@ class ConsentTests(unittest.TestCase):
         self.assertTrue(consent_qa.strict_origin({'Origin':'https://ha.example',
             'Host':'ha.example','X-Smart-Pro-QA-Action':'v1'}))
 
-class HttpLiveGuardTests(unittest.TestCase):
-    """Real localhost HTTP server, mocked Core authority/writer. NO live HA writes."""
-    @classmethod
-    def setUpClass(cls):
-        cls.server=app.Server(('127.0.0.1',0),app.Handler)
-        cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True)
-        cls.thread.start()
-        cls.port=cls.server.server_port
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.shutdown();cls.server.server_close();cls.thread.join(5)
-    def setUp(self):
-        with consent_qa._lock:
-            consent_qa._issued.clear(); consent_qa._attempted=False
 
-    def request(self, method='POST', path='/account-roundtrip', extra=None, body=None,
-                origin='valid'):
-        urlhost=f'127.0.0.1:{self.port}'
-        h={'Content-Type':'application/json',
-           'X-Remote-User-Id':USER,'X-Remote-User-Groups':'system-admin',
-           'X-Smart-Pro-QA-Action':'v1'}
-        if origin == 'valid':h['Origin']='http://'+urlhost
-        elif origin == 'invalid':h['Origin']='https://evil.example'
-        if extra:h.update(extra)
-        if body is None:
-            body=json.dumps({'csrf':consent_qa.issue(USER),'confirm':'ΔΟΚΙΜΗ'},separators=(',',':'))
-        conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=3)
-        conn.request(method,path,body=body.encode('utf-8') if isinstance(body,str) else body,headers=h)
-        res=conn.getresponse();data=res.read();status=res.status;headers=dict(res.getheaders())
-        conn.close();return status,data,headers
+    def test_action_scopes_are_not_interchangeable(self):
+        token=consent_qa.issue(USER,now=100.0,action='revoke')
+        self.assertFalse(consent_qa.consume(token,USER,'ΔΗΜΙΟΥΡΓΙΑ',action='create',now=101.0))
+        token=consent_qa.issue(USER,now=100.0,action='revoke')
+        self.assertTrue(consent_qa.consume(token,USER,'ΑΝΑΚΛΗΣΗ',action='revoke',now=101.0))
 
-    def test_actual_direct_socket_rejected_even_with_forged_headers(self):
-        with patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(extra={'X-Forwarded-For':'172.30.32.2'})
-            self.assertEqual(status,403)
-            writer.assert_not_called()
-
-    def test_nonadmin_denied(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':False,'reason':'non_admin'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request()
-            self.assertEqual(status,403);writer.assert_not_called()
-
-    def test_valid_core_admin_consent_and_browser_fetch_can_write_exactly_once(self):
-        token=consent_qa.issue(USER)
-        payload=json.dumps({'csrf':token,'confirm':'ΔΟΚΙΜΗ'},ensure_ascii=False)
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip',return_value='qa_account_created_verified_deleted') as writer:
-            status,body,headers=self.request(body=payload)
-            self.assertEqual(status,200)
-            self.assertIn('application/json',headers['Content-Type'])
-            self.assertEqual(json.loads(body),{'code':'qa_account_created_verified_deleted'})
-            writer.assert_called_once()
-            status,_,_=self.request(body=payload)
-            self.assertEqual(status,403);writer.assert_called_once()
-
-    def test_second_distinct_token_after_first_attempt_is_denied(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip',return_value='qa_account_created_verified_deleted') as writer:
-            status,_,_=self.request()
-            self.assertEqual(status,200)
-            status,_,_=self.request()
-            self.assertEqual(status,409);writer.assert_called_once()
-
-    def test_origin_mismatch_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,body,_=self.request(origin='invalid')
-            self.assertEqual(status,403); self.assertIn(b'origin_gate_denied_no_write',body)
-            writer.assert_not_called()
-
-    def test_cross_site_fetch_metadata_denied(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(extra={'Sec-Fetch-Site':'cross-site'})
-            self.assertEqual(status,403);writer.assert_not_called()
-
-    def test_missing_origin_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(origin='absent')
-            self.assertEqual(status,403);writer.assert_not_called()
-
-    def test_absent_action_header_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(extra={'X-Smart-Pro-QA-Action':''})
-            self.assertEqual(status,403);writer.assert_not_called()
-
-    def test_native_html_form_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(extra={'Content-Type':'application/x-www-form-urlencoded'},body='csrf=x&confirm=x')
-            self.assertIn(status,(400,403));writer.assert_not_called()
-
-    def test_missing_csrf_or_wrong_phrase_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(body='{"csrf":"bad","confirm":"ΔΟΚΙΜΗ"}')
-            self.assertEqual(status,403)
-            status,_,_=self.request(body=json.dumps({'csrf':consent_qa.issue(USER),'confirm':'INVALID'}))
-            self.assertEqual(status,403);writer.assert_not_called()
-
-    def test_invalid_json_or_extra_fields_no_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            for body in ('not json','{"csrf":1,"confirm":"ΔΟΚΙΜΗ"}',
-                         '{"csrf":"abc","confirm":"ΔΟΚΙΜΗ","extra":true}',
-                         'x'*513):
-                with self.subTest(body=body[:20]):
-                    status,_,_=self.request(body=body)
-                    self.assertEqual(status,400)
-            writer.assert_not_called()
-
-    def test_unsupported_url_and_methods_denied(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,_,_=self.request(path='/')
-            self.assertEqual(status,405)
-            for method in ('PUT','PATCH','DELETE'):
-                status,_,_=self.request(method=method)
-                self.assertEqual(status,405)
-            writer.assert_not_called()
-
-    def test_read_only_probe_still_works_without_sec_fetch_site(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            status,body,_=self.request(path='/origin-check',
-                 extra={'X-Smart-Pro-QA-Probe':'v1'},body='{"probe":"metadata-v1"}')
-            self.assertEqual(status,200)
-            result=json.loads(body)
-            self.assertEqual(result['code'],'request_metadata_observed_no_write')
-            self.assertEqual(result['origin'],'valid')
-            self.assertEqual(result['origin_host'],'same')
-            self.assertEqual(result['fetch_site'],'missing')
-            self.assertEqual(result['custom_header'],'yes')
-            writer.assert_not_called()
-
-    def test_no_js_fallback_cannot_create(self):
-        html=app.render_page({'is_admin':True,'reason':'ok'},consent_token='testtoken').decode()
-        self.assertIn('src="probe.js"',html)
-        self.assertIn('action="account-roundtrip"',html)
-        self.assertNotIn(USER,html)
-        self.assertIn('ΔΟΚΙΜΗ',html)
-        js=(ROOT/'smart-pro-access-preflight/probe.js').read_text()
-        self.assertIn("mode: 'same-origin'",js)
-        self.assertIn('event.preventDefault()',js)
-        self.assertIn('X-Smart-Pro-QA-Action',js)
-        self.assertNotIn('config/auth/create',js)
-
-    def test_uncertain_writer_result_not_misreported_as_success(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip',side_effect=qa.RoundTripError('cleanup_uncertain_check_users')):
-            status,body,_=self.request()
-            self.assertEqual(status,200)
-            self.assertEqual(json.loads(body),{'code':'cleanup_uncertain_check_users'})
-
-    def test_busy_action_does_not_write(self):
-        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}), \
-             patch.object(app,'run_qa_roundtrip') as writer:
-            app.ROUND_TRIP_LOCK.acquire()
-            try:
-                status,_,_=self.request()
-                self.assertEqual(status,409); writer.assert_not_called()
-            finally: app.ROUND_TRIP_LOCK.release()
-
-    def test_qa_docker_includes_only_expected_writer_module(self):
-        d=(ROOT/'smart-pro-access-preflight/Dockerfile').read_text()
-        self.assertIn('COPY account_roundtrip.py',d)
-        self.assertIn('COPY consent_qa.py',d)
-        self.assertIn('COPY probe.js',d)
-        self.assertNotIn('COPY smart-pro-system',d)
-
-    def test_no_nonadmin_forms(self):
-        html=app.render_page({'is_admin':False,'reason':'non_admin'}).decode()
-        self.assertNotIn('account-roundtrip-form',html)
-        self.assertNotIn('origin-probe-form',html)
-
-if __name__=='__main__':unittest.main()
+    def test_independent_attempts(self):
+        self.assertTrue(consent_qa.allow_one_attempt('create'))
+        self.assertTrue(consent_qa.allow_one_attempt('revoke'))
+        self.assertFalse(consent_qa.allow_one_attempt('create'))
+        self.assertFalse(consent_qa.allow_one_attempt('revoke'))

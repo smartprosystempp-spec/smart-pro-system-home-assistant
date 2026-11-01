@@ -24,33 +24,37 @@
       probeTarget.textContent = 'browser_fetch_failed_no_write (χωρίς αλλαγές χρήστη)';
     } finally { button.disabled = false; }
   });
-  const form = document.getElementById('account-roundtrip-form');
-  const result = document.getElementById('roundtrip-result');
-  if (!form || !result) return;
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = form.querySelector('button');
-    button.disabled = true;
-    result.textContent = 'Η εφάπαξ δοκιμή εκτελείται. Μην επαναλάβετε.';
-    try {
-      const csrf = form.querySelector('input[name="csrf"]').value;
-      const confirm = form.querySelector('input[name="confirm"]').value;
-      const response = await fetch(form.action, {
-        method: 'POST', mode: 'same-origin', credentials: 'same-origin',
-        cache: 'no-store', redirect: 'error',
-        headers: {'Content-Type':'application/json','X-Smart-Pro-QA-Action':'v1'},
-        body: JSON.stringify({csrf, confirm})
-      });
-      if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json'))
-        throw Error('qa_write_rejected_or_uncertain');
-      const data = await response.json();
-      if (typeof data.code !== 'string' || !/^[a-z0-9_]{3,90}$/.test(data.code))
-        throw Error('invalid_response');
-      result.textContent = 'Αποτέλεσμα: ' + data.code +
-        '\nΕλέγξτε την καρτέλα Χρήστες του Home Assistant. Μην επαναλάβετε.';
-    } catch (_error) {
-      // After a failed or interrupted request, do NOT claim no write.
-      result.textContent = 'result_unknown_check_HA_users_no_retry — Ελέγξτε τη λίστα Χρηστών, μην επαναλάβετε.';
-    }
-  });
+  for (const [id, targetId] of [
+    ['retained-create-form', 'retained-create-result'],
+    ['retained-revoke-form', 'retained-revoke-result'],
+  ]) {
+    const form = document.getElementById(id);
+    const result = document.getElementById(targetId);
+    if (!form || !result) continue;
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      result.textContent = 'Εκτέλεση μίας ενέργειας. Μην επαναλάβετε.';
+      try {
+        const csrf = form.querySelector('input[name="csrf"]').value;
+        const confirm = form.querySelector('input[name="confirm"]').value;
+        const response = await fetch(form.action, {
+          method: 'POST', mode: 'same-origin', credentials: 'same-origin',
+          cache: 'no-store', redirect: 'error',
+          headers: {'Content-Type':'application/json','X-Smart-Pro-QA-Action':'v1'},
+          body: JSON.stringify({csrf, confirm})
+        });
+        if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json'))
+          throw Error('qa_action_rejected_or_uncertain');
+        const data = await response.json();
+        if (typeof data.code !== 'string' || !/^[a-z0-9_]{3,100}$/.test(data.code))
+          throw Error('invalid_response');
+        result.textContent = 'Αποτέλεσμα: ' + data.code +
+          '\nΕλέγξτε την καρτέλα Χρήστες του Home Assistant. Μην επαναλάβετε.';
+      } catch (_error) {
+        result.textContent = 'result_unknown_check_HA_users_no_retry — Ελέγξτε τη λίστα χρηστών.';
+      }
+    });
+  }
 })();

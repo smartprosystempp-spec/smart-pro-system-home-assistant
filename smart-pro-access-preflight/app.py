@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Strictly isolated, test-only HA user API round-trip; NOT customer access.
+"""Lab-only persistent non-login HA administrator lifecycle.
 
-QA 0.3.3: strict authenticated same-origin browser POST and consent-bound
-non-login temporary HA administrator create/verify/delete roundtrip.
-Changes only after an explicit, one-time admin confirmation.
-Not Portal-integrated, not a permanent Smart Pro credential or grant.
+0.4.0: explicit, independently consented creation and revocation; no username,
+password, token custody, Portal or remote technician login integration.
+Never install on production.
 """
 
 from __future__ import annotations
@@ -21,10 +20,12 @@ from typing import Mapping
 from urllib.parse import urlsplit
 
 from ha_readback import AdminReadbackError, read_ha_admin_users
-from consent_qa import APPROVAL_WORD, issue, consume, attempted, allow_one_attempt, strict_origin
-from account_roundtrip import RoundTripError, run_qa_roundtrip
+from consent_qa import (APPROVAL_WORD, REVOKE_WORD, issue, consume, attempted,
+                        allow_one_attempt, strict_origin)
+from persistent_qa import (inspect_retained, create_retained, revoke_retained,
+                           RetainedAccountError)
 
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.4.0"
 ROUND_TRIP_LOCK = threading.Lock()
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
@@ -171,74 +172,85 @@ def classify_request_metadata(headers: Mapping[str, str]) -> dict[str, str]:
     }
 
 
-def render_page(outcome: dict[str, str | bool], consent_token: str = "",
-                result: dict[str, str] | None = None, result_code: str = "") -> bytes:
+
+def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknown',
+                create_token: str = '', revoke_token: str = '',
+                classification: dict[str, str] | None = None) -> bytes:
+    """Never render target IDs, access secrets, or a write action for non-admins."""
     ok = outcome['is_admin'] is True
     title = ('Διαχειριστής Home Assistant — επιβεβαιώθηκε και από το Core'
              if ok else 'Δεν επιβεβαιώθηκε διαχειριστής')
-    description = ('Η ταυτότητα και η ομάδα διαχειριστή επιβεβαιώθηκαν από το Home Assistant Core.'
-                   if ok else 'Ο τρέχων λογαριασμός δεν επιβεβαιώθηκε ως διαχειριστής.')
+    description = ('Η ταυτότητα και τα δικαιώματα διαχειριστή επαληθεύτηκαν.'
+                   if ok else 'Ο τρέχων λογαριασμός δεν επαληθεύτηκε ως διαχειριστής.')
     result_html = ''
-    if result:
+    if classification:
         labels = {
             'code': 'Αποτέλεσμα', 'origin': 'Browser Origin',
             'fetch_site': 'Browser Fetch Metadata', 'origin_host': 'Origin / Proxy Host',
             'custom_header': 'Ειδική κεφαλίδα browser',
         }
-        result_html = '<section class="qa-result"><h2>Ασφαλή στοιχεία ελέγχου</h2>' + ''.join(
-            '<p><strong>' + html.escape(labels[key]) + ':</strong> ' + html.escape(result[key]) + '</p>'
-            for key in labels) + '</section>'
-    if result_code:
-        result_html = '<section class="qa-result"><h2>Αποτέλεσμα ελεγχόμενης δοκιμής</h2><p><strong>' + html.escape(result_code) + '</strong></p><p>Ελέγξτε υποχρεωτικά τη λίστα χρηστών του Home Assistant. Μην επαναλάβετε την ενέργεια.</p></section>'
+        result_html = '<section><h2>Έλεγχος επικοινωνίας</h2>' + ''.join(
+            '<p><strong>' + html.escape(labels[k]) + ':</strong> '
+            + html.escape(classification[k]) + '</p>' for k in labels
+        ) + '</section>'
     panel = ''
     if ok:
-        panel = """<section class="qa-action">
-<h2>Έλεγχος φόρμας — ΧΩΡΙΣ αλλαγές</h2>
+        status_text = {
+            'absent':'Δεν υπάρχει ο ειδικός δοκιμαστικός λογαριασμός.',
+            'retained_no_login':'Ο ειδικός δοκιμαστικός διαχειριστής υπάρχει, χωρίς στοιχεία σύνδεσης.',
+            'review_required':'Βρέθηκε αμφίβολη εγγραφή. Μόνο χειροκίνητος έλεγχος στη λίστα χρηστών.',
+            'readback_unavailable':'Δεν έγινε ασφαλής ανάγνωση. Καμία ενέργεια δεν επιτρέπεται.',
+        }.get(retained_state, 'Άγνωστη κατάσταση. Καμία ενέργεια δεν επιτρέπεται.')
+        panel = '<section><h2>Κατάσταση δοκιμαστικού διαχειριστή</h2><p>' + html.escape(status_text) + '</p></section>'
+        panel += """<section><h2>1. Δοκιμή επικοινωνίας — χωρίς αλλαγές</h2>
 <form method="post" action="origin-check" id="origin-probe-form">
-<button type="submit" class="probe-button">1. Έλεγχος επικοινωνίας χωρίς δημιουργία χρήστη</button>
-</form>
-<output id="probe-result" role="status" aria-live="polite"></output>
-</section>"""
-        if consent_token and not result_code:
-            panel += f"""<section class="qa-action">
-<h2>Εφάπαξ δημιουργία και άμεση διαγραφή (μόνο δοκιμαστικό HA)</h2>
-<p>Μετά την προηγούμενη επιβεβαίωση, ο διαχειριστής μπορεί να εγκρίνει ρητά μία δημιουργία
-προσωρινού non-owner διαχειριστή <strong>χωρίς username και password</strong>, έλεγχο Core,
-και άμεση διαγραφή. Η δοκιμή δεν επιτρέπει σύνδεση. Αν υπάρξει διακοπή, η εγγραφή
-μπορεί να παραμείνει: θα ελεγχθεί χειροκίνητα η λίστα χρηστών.</p>
-<form method="post" action="account-roundtrip" id="account-roundtrip-form">
-<input type="hidden" name="csrf" value="{html.escape(consent_token, quote=True)}">
-<label for="confirm">Πληκτρολόγησε <strong>{APPROVAL_WORD}</strong> για μία μόνο δοκιμή:</label>
-<input id="confirm" name="confirm" autocomplete="off" maxlength="20" required>
-<button type="submit" class="roundtrip-button">2. Έγκριση ελεγχόμενης δοκιμής</button>
-</form><output id="roundtrip-result" role="status" aria-live="polite"></output>
-<p class="note">Η πραγματική δοκιμή απαιτεί αποκλειστικά υποβολή browser μέσω JavaScript,
-ακριβή έλεγχο Origin/Host, μία ειδική κεφαλίδα αιτήματος, ενεργή ταυτότητα admin στο Core
-και έγκυρο token έγκρισης μίας χρήσης. Δεν γίνεται καμία αλλαγή με απλή υποβολή HTML.</p>
-</section>"""
+<button type="submit" class="probe-button">Έλεγχος επικοινωνίας χωρίς αλλαγές</button>
+</form><output id="probe-result" role="status" aria-live="polite"></output></section>"""
+        if retained_state == 'absent' and create_token:
+            panel += f"""<section><h2>2. Δημιουργία και διατήρηση QA admin — χωρίς δυνατότητα login</h2>
+<p>Δημιουργείται ένας πραγματικός λογαριασμός Home Assistant με ομάδα διαχειριστών.
+Παραμένει μετά από κλείσιμο ή επανεκκίνηση του πρόσθετου. <strong>Δεν έχει username ή password,
+άρα δεν μπορεί ακόμη να χρησιμοποιηθεί για σύνδεση.</strong> Είναι μόνο για την ελεγχόμενη εγκατάσταση QA.</p>
+<form method="post" action="retain-admin" id="retained-create-form">
+<input type="hidden" name="csrf" value="{html.escape(create_token, quote=True)}">
+<label for="create-confirm">Πληκτρολόγησε <strong>{APPROVAL_WORD}</strong>:</label>
+<input id="create-confirm" name="confirm" autocomplete="off" maxlength="24" required>
+<button type="submit" class="create-button">Δημιουργία δοκιμαστικού admin (διατηρείται)</button>
+</form><output id="retained-create-result" role="status" aria-live="polite"></output></section>"""
+        if retained_state == 'retained_no_login' and revoke_token:
+            panel += f"""<section><h2>3. Ανάκληση του δοκιμαστικού admin</h2>
+<p>Η πράξη διαγράφει μόνο τον ειδικό λογαριασμό <code>Smart Pro QA RETAINED NO LOGIN</code>.
+Αν έχει τροποποιηθεί, η αυτόματη διαγραφή απορρίπτεται.</p>
+<form method="post" action="revoke-admin" id="retained-revoke-form">
+<input type="hidden" name="csrf" value="{html.escape(revoke_token, quote=True)}">
+<label for="revoke-confirm">Πληκτρολόγησε <strong>{REVOKE_WORD}</strong>:</label>
+<input id="revoke-confirm" name="confirm" autocomplete="off" maxlength="24" required>
+<button type="submit" class="revoke-button">Διαγραφή μόνο του δοκιμαστικού admin</button>
+</form><output id="retained-revoke-result" role="status" aria-live="polite"></output></section>"""
     return f"""<!doctype html><html lang="el"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
-<title>Smart Pro Access — QA</title>
+<title>Smart Pro Access — QA 0.4.0</title>
 <style>
 :root{{color-scheme:light dark}}*{{box-sizing:border-box}}
 body{{margin:0;background:#101722;color:#e9eef7;font:16px/1.55 system-ui,-apple-system,sans-serif}}
-main{{max-width:650px;margin:7vh auto;padding:26px;border:1px solid #354254;border-radius:16px;background:#172232}}
+main{{max-width:670px;margin:6vh auto;padding:26px;border:1px solid #354254;border-radius:16px;background:#172232}}
 h1{{font-size:1.36rem;line-height:1.35;margin:.5rem 0 1rem}}
 h2{{font-size:1.05rem;margin:0 0 10px}}p{{color:#c7d2e1}}.k{{font-weight:700;color:#b6c6da;font-size:.78rem}}
 .status{{border-radius:100px;padding:5px 11px;font-size:.82rem;font-weight:700}}
 .ok{{background:#173d32;color:#a8f1c5}}.blocked{{background:#50302d;color:#ffcbc3}}
 .note{{font-size:.86rem;padding-top:12px;border-top:1px solid #354254}}
-.qa-action,.qa-result{{margin-top:18px;padding:16px;border:1px solid #5d718d;border-radius:12px}}
-.qa-result p{{margin:7px 0}}button{{background:#1b6f67;color:white;border:0;border-radius:8px;padding:11px;font-weight:700;cursor:pointer}}
-.roundtrip-button{{background:#367ecb}}button:disabled{{opacity:.5;cursor:default}}
+section{{margin-top:18px;padding:16px;border:1px solid #5d718d;border-radius:12px}}
+section p{{margin:7px 0}}button{{background:#1b6f67;color:white;border:0;border-radius:8px;padding:11px;font-weight:700;cursor:pointer}}
+.create-button{{background:#367ecb}}.revoke-button{{background:#994c50}}
+button:disabled{{opacity:.5;cursor:default}}
 input{{display:block;width:100%;padding:9px;border:1px solid #7e8ea2;background:white;color:#141b26;border-radius:7px;margin:10px 0}}
 output{{display:block;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}}
 </style><script src="probe.js" defer></script></head><body>
-<main><div class="k">SMART PRO SYSTEM · ΔΟΚΙΜΑΣΤΙΚΟΣ ΕΛΕΓΧΟΣ</div>
+<main><div class="k">SMART PRO SYSTEM · ΑΠΟΚΛΕΙΣΤΙΚΑ ΔΟΚΙΜΑΣΤΙΚΟ</div>
 <h1>{html.escape(title)}</h1><span class="status {'ok' if ok else 'blocked'}">{'ΕΠΙΤΥΧΙΑ' if ok else 'ΔΕΝ ΕΓΚΡΙΝΕΤΑΙ'}</span>
-<p>{html.escape(description)}</p><p class="note">Έκδοση QA {APP_VERSION}. Μόνο για ελεγχόμενη
-δοκιμαστική εγκατάσταση. Η εμφάνιση της σελίδας δεν δημιουργεί λογαριασμό.
-Δεν συνδέεται με το Portal ή το Managed Support.</p>
+<p>{html.escape(description)}</p><p class="note">Έκδοση QA {APP_VERSION}. Μόνο στην ελεγχόμενη εγκατάσταση.
+Το άνοιγμα της σελίδας δεν δημιουργεί λογαριασμό. Δεν συνδέεται με Portal ή Managed Support.
+Κανένας κωδικός ή μέθοδος σύνδεσης δεν δημιουργείται από αυτή την έκδοση.</p>
 {panel}{result_html}</main></body></html>""".encode('utf-8')
 
 
@@ -247,8 +259,7 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ''
 
     def log_message(self, *_args: object) -> None:
-        # Never log user IDs, URLs, request metadata, query or auth headers.
-        return
+        return  # no request URLs, identity headers, secrets or user identifiers
 
     def _write(self, status: int, data: bytes, ctype: str) -> None:
         self.send_response(status)
@@ -266,7 +277,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path == '/probe.js':
-            # Static script; no user information is embedded or returned.
             if self.client_address[0] != '172.30.32.2':
                 self._write(HTTPStatus.FORBIDDEN, b'Forbidden', 'text/plain')
             else:
@@ -280,24 +290,32 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/status':
             body = json.dumps({'version':APP_VERSION, **outcome}, separators=(',', ':')).encode()
             self._write(status, body, 'application/json; charset=utf-8')
-        else:
+            return
+        state = 'unknown'
+        create_token = revoke_token = ''
+        if outcome['is_admin']:
+            state = inspect_retained(supervisor_token=os.environ.get('SUPERVISOR_TOKEN',''))
             identity = _single_header(self.headers, 'X-Remote-User-Id')
-            token = issue(identity) if outcome['is_admin'] and identity and not attempted() else ''
-            self._write(status, render_page(outcome, consent_token=token), 'text/html; charset=utf-8')
+            if identity and state == 'absent' and not attempted('create'):
+                create_token = issue(identity, action='create')
+            elif identity and state == 'retained_no_login' and not attempted('revoke'):
+                revoke_token = issue(identity, action='revoke')
+        self._write(status, render_page(outcome, retained_state=state,
+                    create_token=create_token, revoke_token=revoke_token),
+                    'text/html; charset=utf-8')
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in ('/origin-check', '/account-roundtrip'):
+        if path not in ('/origin-check', '/retain-admin', '/revoke-admin'):
             self._write(HTTPStatus.METHOD_NOT_ALLOWED, b'Unsupported action', 'text/plain')
             return
-        # Require fresh authenticated ingress + Core admin authority for every POST.
         outcome = verify_live_core_admin(self.client_address[0], self.headers)
         if outcome['is_admin'] is not True:
             self._write(HTTPStatus.FORBIDDEN, b'Administrator required', 'text/plain')
             return
         if path == '/origin-check':
             try:
-                length = int(self.headers.get('Content-Length', '0'))
+                length = int(self.headers.get('Content-Length','0'))
             except ValueError:
                 length = -1
             if not (0 <= length <= 256):
@@ -307,71 +325,71 @@ class Handler(BaseHTTPRequestHandler):
                 self.rfile.read(length)
             classification = classify_request_metadata(self.headers)
             if _single_header(self.headers, 'X-Smart-Pro-QA-Probe') == 'v1':
-                self._write(HTTPStatus.OK,
-                            json.dumps(classification, separators=(',', ':')).encode('utf-8'),
+                self._write(HTTPStatus.OK, json.dumps(classification,separators=(',',':')).encode(),
                             'application/json; charset=utf-8')
             else:
-                self._write(HTTPStatus.OK, render_page(outcome, result=classification),
+                self._write(HTTPStatus.OK, render_page(outcome,classification=classification),
                             'text/html; charset=utf-8')
             return
-        # Strict write boundary: no action from native HTML form, cross-site or
-        # ambiguous origin, or without the one-use consent tied to this HA user.
+        # Privileged actions have their own independently scoped, single-use
+        # approval. Origin-only or browser-only claims are NEVER sufficient.
         if not strict_origin(self.headers):
-            self._write(HTTPStatus.FORBIDDEN, b'origin_gate_denied_no_write', 'text/plain')
+            self._write(HTTPStatus.FORBIDDEN, b'origin_gate_denied_no_write','text/plain')
             return
         if _single_header(self.headers, 'X-Smart-Pro-QA-Action') != 'v1':
-            self._write(HTTPStatus.FORBIDDEN, b'action_header_missing_no_write', 'text/plain')
+            self._write(HTTPStatus.FORBIDDEN, b'action_header_missing_no_write','text/plain')
             return
         if _single_header(self.headers, 'Content-Type') != 'application/json':
-            self._write(HTTPStatus.BAD_REQUEST, b'invalid_content_type_no_write', 'text/plain')
+            self._write(HTTPStatus.BAD_REQUEST, b'invalid_content_type_no_write','text/plain')
             return
         try:
             length = int(_single_header(self.headers, 'Content-Length') or '')
             if not 0 < length <= 512:
                 raise ValueError()
-            raw = self.rfile.read(length)
-            payload = json.loads(raw.decode('utf-8', 'strict'))
-            if not isinstance(payload, dict) or set(payload) != {'csrf', 'confirm'}:
+            payload = json.loads(self.rfile.read(length).decode('utf-8','strict'))
+            if not isinstance(payload,dict) or set(payload) != {'csrf','confirm'}:
                 raise ValueError()
-            if not isinstance(payload['csrf'], str) or not isinstance(payload['confirm'], str):
+            if not isinstance(payload['csrf'],str) or not isinstance(payload['confirm'],str):
                 raise ValueError()
-        except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-            self._write(HTTPStatus.BAD_REQUEST, b'invalid_payload_no_write', 'text/plain')
+        except (ValueError,UnicodeDecodeError,json.JSONDecodeError):
+            self._write(HTTPStatus.BAD_REQUEST,b'invalid_payload_no_write','text/plain')
             return
-        identity = _single_header(self.headers, 'X-Remote-User-Id')
-        if not identity or not consume(payload['csrf'], identity, payload['confirm']):
-            self._write(HTTPStatus.FORBIDDEN, b'approval_invalid_no_write', 'text/plain')
+        action = 'create' if path == '/retain-admin' else 'revoke'
+        identity = _single_header(self.headers,'X-Remote-User-Id')
+        if not identity or not consume(payload['csrf'],identity,payload['confirm'],action=action):
+            self._write(HTTPStatus.FORBIDDEN,b'approval_invalid_no_write','text/plain')
             return
         if not ROUND_TRIP_LOCK.acquire(blocking=False):
-            self._write(HTTPStatus.CONFLICT, b'qa_action_busy_no_write', 'text/plain')
+            self._write(HTTPStatus.CONFLICT,b'qa_action_busy_no_write','text/plain')
             return
         try:
-            if not allow_one_attempt():
-                self._write(HTTPStatus.CONFLICT, b'qa_already_attempted_no_write', 'text/plain')
+            if not allow_one_attempt(action):
+                self._write(HTTPStatus.CONFLICT,b'qa_already_attempted_no_write','text/plain')
                 return
-            # From here writes MAY have happened; never claim "no_write" on errors.
             try:
-                code = run_qa_roundtrip(supervisor_token=os.environ.get('SUPERVISOR_TOKEN', ''))
-            except RoundTripError as error:
-                known_codes = {
-                    'qa_suffix_invalid', 'core_auth_unavailable', 'core_challenge_invalid',
-                    'core_auth_denied', 'command_not_allowed', 'core_reply_invalid',
-                    'core_command_rejected', 'inventory_invalid', 'existing_qa_account_stop',
-                    'create_result_uncertain_check_users', 'create_id_uncertain_check_users',
-                    'created_user_readback_mismatch', 'created_user_permissions_mismatch',
-                    'unexpected_credentials_attached', 'cleanup_uncertain_check_users',
-                    'cleanup_not_confirmed_check_users', 'core_roundtrip_failed_check_users',
+                token=os.environ.get('SUPERVISOR_TOKEN','')
+                code = (create_retained(supervisor_token=token) if action == 'create'
+                        else revoke_retained(supervisor_token=token))
+            except RetainedAccountError as e:
+                known = {
+                    'qa_retained_account_already_exists_stop',
+                    'qa_create_uncertain_inspect_users',
+                    'qa_create_identity_uncertain_inspect_users',
+                    'qa_retained_validation_failed_inspect_users',
+                    'qa_revoke_target_mismatch_manual_review',
+                    'qa_revoke_not_confirmed_check_users',
+                    'qa_revoke_uncertain_check_users',
                 }
-                code = str(error) if str(error) in known_codes else 'unexpected_error_check_users'
+                code = str(e) if str(e) in known else 'qa_unknown_outcome_inspect_users'
             except Exception:
-                code = 'unexpected_error_check_users'
-            self._write(HTTPStatus.OK, json.dumps({'code':code},separators=(',',':')).encode(),
+                code = 'qa_unknown_outcome_inspect_users'
+            self._write(HTTPStatus.OK,json.dumps({'code':code},separators=(',',':')).encode(),
                         'application/json; charset=utf-8')
         finally:
             ROUND_TRIP_LOCK.release()
 
     def do_PUT(self) -> None:
-        self._write(HTTPStatus.METHOD_NOT_ALLOWED, b'NO USER WRITES', 'text/plain')
+        self._write(HTTPStatus.METHOD_NOT_ALLOWED,b'Unsupported method','text/plain')
 
     do_PATCH = do_PUT
     do_DELETE = do_PUT
@@ -382,16 +400,15 @@ class Server(ThreadingHTTPServer):
     allow_reuse_address = True
 
 
-# Bundle checked static browser script. No remote resources or inline JS.
-SCRIPT_BYTES = (os.path.join(os.path.dirname(__file__), 'probe.js'))
-with open(SCRIPT_BYTES, 'rb') as _script_file:
-    SCRIPT_BYTES = _script_file.read()
+SCRIPT_PATH = os.path.join(os.path.dirname(__file__),'probe.js')
+with open(SCRIPT_PATH,'rb') as _file:
+    SCRIPT_BYTES=_file.read()
 assert len(SCRIPT_BYTES) < 12000
 
 
 def main() -> None:
-    with Server(('0.0.0.0', PORT), Handler) as server:
-        print(f'[smart-pro-access-qa] {APP_VERSION} ready; diagnostic-only; NO USER WRITES', flush=True)
+    with Server(('0.0.0.0',PORT),Handler) as server:
+        print(f'[smart-pro-access-qa] {APP_VERSION} ready; lab-only retained non-login user lifecycle',flush=True)
         server.serve_forever()
 
 

@@ -1,30 +1,24 @@
-SMART PRO ACCESS PREFLIGHT — 0.3.3 / STAGE 9 / INTERNAL QA
-==========================================================
+SMART PRO ACCESS PREFLIGHT 0.4.0 / INTERNAL QA
 Date: 2026-11-01
-Source baseline: exact GitHub 0.3.2 blob SHAs verified, current TEST HA addon 0.3.2.
-Live evidence from 0.3.2: request_metadata_observed_no_write;
-origin valid; origin_host same; custom_header yes; fetch_site missing.
-New work: restore controlled QA-only credentialless create/verify/delete
-behind strict Origin==Host, same-origin fetch, custom action header,
-admin/Core readback, 180s one-time consent, typed confirmation,
-single process attempt and no auto-start or auto-write.
-Normal browser HTML form cannot issue write: custom header is mandatory.
-Missing Sec-Fetch-Site allowed ONLY when Origin exactly matches Host;
-cross-site/same-site values rejected if present.
+Source baseline: exact live GitHub 0.3.3 blobs, 8/8 matched.
+Scope: Test HA ONLY, retained Core admin WITHOUT login credentials.
 
-Internal Python/real HTTP simulated tests: 109/109 PASS.
-Python syntax compile/AST: PASS.
-JavaScript syntax (node --check): PASS.
-Add-on version/config/Dockerfile consistency: PASS.
-Source baseline Git blob comparison: 6/6 PASS.
-Changed-file package allow-list and ZIP integrity: PASS.
-Build in Home Assistant / Docker: NOT PERFORMED internally.
-Live browser 0.3.3: PENDING.
-Real Core user create/delete: NOT YET PERFORMED.
-Existing main Smart Pro System, Managed Support, Tunnel, Portal, root
-README and repository.yaml: UNCHANGED.
+Internal Python tests / real local socket HTTP / simulated Core sessions:
+120/120 PASS
+JavaScript syntax (node --check): PASS
+Python compilation / AST: PASS
+Config/Dockerfile/runtime version and write-path consistency: PASS
+No auth-provider password/credential writer: PASS
+Legacy temporary account roundtrip regression: PASS
+Create/revoke separate approval scopes + anti-replay: PASS
+Root README and repository.yaml unchanged: PASS
+Package changed-file allowlist and ZIP integrity: PASS
+Docker build inside Home Assistant / Supervisor: NOT TESTED internally
+Real Home Assistant 0.4.0 installation / account retention/revocation: NOT YET TESTED
 
-First live checkpoint: install 0.3.3 QA addon ONLY on TEST HA;
-open admin UI, click ONLY green no-write origin probe; share screenshot.
-Do NOT type ΔΟΚΙΜΗ or click blue action until a separate explicit checkpoint.
-Any later account roundtrip MUST be followed by Users inventory check.
+LIVE 0.3.3 earlier: create/verify/delete qa_account_created_verified_deleted PASS.
+Next 0.4.0: first live checkpoint is ONLY opening UI (no account creation).
+The next test can create a real ADMIN USER RECORD that persists in HA,
+but without credentials there is NO LOGIN capability yet. This does NOT
+grant actual remote Smart Pro access or modify Portal, Managed or Tunnel.
+If any result is uncertain, inspect Users and do NOT retry.
