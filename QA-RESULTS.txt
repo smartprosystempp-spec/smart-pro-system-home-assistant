@@ -1,0 +1,13 @@
+SMART PRO CUSTOMER ACCESS — QA STAGE 4 / 0.1.0
+====================================================
+Purpose: read-only recognition of Home Assistant administrator through Supervisor Ingress.
+Test environment: isolated local Python HTTP and policy tests (NOT live Home Assistant).
+Result: 25 of 25 tests PASS.
+Python syntax: PASS.
+Add-on config YAML: PASS.
+Included change scope: new additive QA add-on + tests + docs only.
+Existing Smart Pro System 3.0.28 / Managed Support 3.19.2 / Tunnel / Portal not changed.
+No Home Assistant user creation, password management, remote access, subscription or Portal writes.
+Full Docker image build: NOT RUN (no Docker available in isolated environment).
+Actual Home Assistant Supervisor Ingress: NOT YET TESTED; this ZIP is for that test.
+CAUTION: repository changed-files archive. Extract and merge folders; do NOT upload ZIP itself as an app.
