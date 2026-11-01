@@ -1,0 +1,21 @@
+name: Customer Managed Access read-only security checks
+
+on:
+  push:
+    branches:
+      - feature/customer-managed-access-enrollment-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  security-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile test-only policy
+        run: |
+          python3 -m py_compile tests/customer_access_admin_gate.py tests/test_customer_managed_access_admin_gate.py tests/test_customer_managed_access_foundation.py
+      - name: Run pure read-only security tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_customer_managed_access*.py' -v
