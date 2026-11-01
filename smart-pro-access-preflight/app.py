@@ -19,7 +19,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 from urllib.parse import urlsplit
 
-APP_VERSION = "0.1.0"
+from ha_readback import AdminReadbackError, read_ha_admin_users
+
+APP_VERSION = "0.2.0"
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
 USER_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,128}\Z")
@@ -62,13 +64,60 @@ def verify_ingress_admin(peer_ip: str, headers: Mapping[str, str]) -> dict[str, 
     return {"is_admin": True, "reason": "admin_detected"}
 
 
+
+def verify_live_core_admin(peer_ip: str, headers: Mapping[str, str], *,
+                           token_supplier=None, user_reader=read_ha_admin_users) -> dict[str, str | bool]:
+    """Check trust *twice*: Supervisor ingress and fresh HA Core admin list.
+
+    The Core list is used only in RAM and never returned or logged. This is
+    neither approval nor provisioning. Normal users fail *before* the privileged
+    token is accessed. The token supplier is injectable solely for offline QA.
+    """
+    baseline = verify_ingress_admin(peer_ip, headers)
+    if baseline["is_admin"] is not True:
+        return baseline
+
+    identity_values = [v for k, v in headers.items() if str(k).lower() == "x-remote-user-id"]
+    if len(identity_values) != 1:
+        return {"is_admin": False, "reason": "identity_unavailable"}
+    user_id = identity_values[0]
+    if not isinstance(user_id, str) or USER_ID_PATTERN.fullmatch(user_id) is None:
+        return {"is_admin": False, "reason": "identity_unavailable"}
+    if token_supplier is None:
+        token_supplier = lambda: os.environ.get("SUPERVISOR_TOKEN", "")
+    try:
+        token = token_supplier()
+        users = user_reader(supervisor_token=token)
+    except AdminReadbackError as exc:
+        # Fixed opaque failure codes. No username, user IDs or token ever leaked.
+        if str(exc) in ("ha_user_list_denied", "ha_auth_failed", "local_ha_token_unavailable"):
+            return {"is_admin": False, "reason": "core_authority_denied"}
+        return {"is_admin": False, "reason": "core_readback_failed"}
+    except Exception:
+        return {"is_admin": False, "reason": "core_readback_failed"}
+
+    if not isinstance(users, list):
+        return {"is_admin": False, "reason": "core_invalid_reply"}
+    matches = [u for u in users if isinstance(u, dict) and u.get("id") == user_id]
+    if len(matches) != 1:
+        return {"is_admin": False, "reason": "core_identity_not_matched"}
+    u = matches[0]
+    groups = u.get("group_ids")
+    if (u.get("is_active") is not True or u.get("system_generated") is not False
+            or not isinstance(groups, list)
+            or not all(isinstance(g, str) for g in groups)
+            or (u.get("is_owner") is not True and ADMIN_GROUP not in groups)):
+        return {"is_admin": False, "reason": "core_user_not_admin"}
+    return {"is_admin": True, "reason": "admin_and_core_verified_read_only"}
+
+
 def render_page(outcome: dict[str, str | bool]) -> bytes:
     ok = outcome["is_admin"] is True
     if ok:
-        title = "Διαχειριστής Home Assistant — επιβεβαιώθηκε"
+        title = "Διαχειριστής Home Assistant — επιβεβαιώθηκε και από το Core"
         description = (
-            "Το Home Assistant αναγνωρίζει αυτή τη σύνδεση ως διαχειριστή. "
-            "Δεν δημιουργήθηκε λογαριασμός και δεν δόθηκε πρόσβαση στη Smart Pro."
+            "Το Home Assistant αναγνώρισε τον διαχειριστή και επέτρεψε την ασφαλή ανάγνωση "
+            "των δικαιωμάτων χρηστών μέσω Core API. Κανένας χρήστης δεν δημιουργήθηκε ή τροποποιήθηκε."
         )
         badge_class = "ok"
     else:
@@ -77,6 +126,12 @@ def render_page(outcome: dict[str, str | bool]) -> bytes:
             description = "Ο τρέχων λογαριασμός δεν έχει δικαιώματα διαχειριστή."
         elif outcome["reason"] == "untrusted_source":
             description = "Ανοίξτε αυτό το εργαλείο μόνο από το Home Assistant."
+        elif str(outcome["reason"]).startswith("core_"):
+            description = (
+                "Η αρχική ταυτότητα ήταν διαχειριστή, αλλά δεν επιβεβαιώθηκε η πρόσβαση "
+                "στο προστατευμένο Core API. Δεν πραγματοποιήθηκε καμία αλλαγή. "
+                "Κωδικός ελέγχου: " + str(outcome["reason"])
+            )
         else:
             description = "Το Home Assistant δεν επέστρεψε επαρκή στοιχεία για ασφαλή επιβεβαίωση."
         badge_class = "blocked"
@@ -91,7 +146,7 @@ h1{{font-size:1.42rem;line-height:1.35;margin:.5rem 0 1rem}}.k{{font-weight:700;
 p{{color:#c7d2e1}}.note{{font-size:.88rem;padding-top:15px;border-top:1px solid #354254}}
 </style></head><body><main><div class="k">SMART PRO SYSTEM · ΔΟΚΙΜΑΣΤΙΚΟΣ ΕΛΕΓΧΟΣ</div>
 <h1>{html.escape(title)}</h1><span class="status {badge_class}">{'ΕΠΙΤΥΧΙΑ' if ok else 'ΔΕΝ ΕΓΚΡΙΝΕΤΑΙ'}</span>
-<p>{html.escape(description)}</p><p class="note">Πρόκειται μόνο για δοκιμή ταυτότητας. Δεν διαβάζονται ή μεταφέρονται κωδικοί.
+<p>{html.escape(description)}</p><p class="note">Πρόκειται μόνο για δοκιμή ταυτότητας και ανάγνωσης δικαιωμάτων του Core. Δεν μεταφέρονται κωδικοί.
 Δεν συνδέεται με το Portal, δεν προσθέτει χρήστες και δεν αλλάζει το Managed Support.</p>
 <p class="note">Έκδοση QA {APP_VERSION} · Για επανέλεγχο ανανεώστε τη σελίδα.</p></main></body></html>""".encode("utf-8")
 
@@ -122,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
         if path not in ("/", "/status"):
             self._write(HTTPStatus.NOT_FOUND, b"Not found", "text/plain")
             return
-        outcome = verify_ingress_admin(self.client_address[0], self.headers)
+        outcome = verify_live_core_admin(self.client_address[0], self.headers)
         status = HTTPStatus.OK if outcome["is_admin"] else HTTPStatus.FORBIDDEN
         if path == "/status":
             # Status contains only boolean and fixed reason, no user identifiers.
@@ -147,7 +202,7 @@ class Server(ThreadingHTTPServer):
 def main() -> None:
     # Deliberately no host port publication; Supervisor ingress is the sole path.
     with Server(("0.0.0.0", PORT), Handler) as server:
-        print(f"[smart-pro-access-qa] {APP_VERSION} ready; read-only; ingress-only", flush=True)
+        print(f"[smart-pro-access-qa] {APP_VERSION} ready; read-only Core admin proof; ingress-only", flush=True)
         server.serve_forever()
 
 

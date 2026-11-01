@@ -1,13 +1,26 @@
-SMART PRO CUSTOMER ACCESS — QA STAGE 4 / 0.1.0
-====================================================
-Purpose: read-only recognition of Home Assistant administrator through Supervisor Ingress.
-Test environment: isolated local Python HTTP and policy tests (NOT live Home Assistant).
-Result: 25 of 25 tests PASS.
-Python syntax: PASS.
-Add-on config YAML: PASS.
-Included change scope: new additive QA add-on + tests + docs only.
-Existing Smart Pro System 3.0.28 / Managed Support 3.19.2 / Tunnel / Portal not changed.
-No Home Assistant user creation, password management, remote access, subscription or Portal writes.
-Full Docker image build: NOT RUN (no Docker available in isolated environment).
-Actual Home Assistant Supervisor Ingress: NOT YET TESTED; this ZIP is for that test.
-CAUTION: repository changed-files archive. Extract and merge folders; do NOT upload ZIP itself as an app.
+SMART PRO ACCESS PREFLIGHT 0.2.0 -- STAGE 5 INTERNAL QA
+=============================================================
+Source base: exact Git blob match to Smart Pro Access Preflight QA 0.1.0, GitHub main.
+Changed only independent QA add-on + QA docs/tests.
+Live baseline 0.1.0: Home Assistant admin recognized; non-admin Smart Pro QA User denied.
+Internal Stage 5 tests: 65/65 PASS (pure policy, fake Supervisor WS, real localhost HTTP denial).
+Python AST syntax: PASS (5 Python files).
+Addon config.yaml parse + constraints: PASS.
+Version consistency: 0.2.0 / Docker build arg 0.2.0: PASS.
+No account create/delete/update commands: PASS.
+No Portal, production Smart Pro System, Managed Support, Tunnel files: PASS.
+Docker image build/publish: NOT RUN.
+Real HA Supervisor/WS test with 0.2.0: PENDING.
+Expected safety: denying the current non-admin user before any token access.
+Core access is expanded only on ISOLATED QA add-on; stop/remove after QA.
+No personal credentials or user IDs written to logs, browser or repository.
+
+Test user:
+  Display name: Smart Pro QA User
+  Username: smartpro_qa_user
+  Admin rights: OFF
+  Local-only: ON
+  Password: deliberately not recorded
+
+ATTENTION: This is a changed-files repository ZIP for test installation, not a production
+release, not a complete GitHub repository, and not a single-click Home Assistant install.

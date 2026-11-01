@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import sys
 import threading
 import unittest
 import urllib.error
@@ -12,6 +13,7 @@ import urllib.request
 
 BASE = pathlib.Path(__file__).resolve().parents[1]
 APP = BASE / "smart-pro-access-preflight" / "app.py"
+sys.path.insert(0, str(APP.parent))
 spec = importlib.util.spec_from_file_location("smart_pro_access_preflight_qa", APP)
 app = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
@@ -86,12 +88,13 @@ class PolicyTests(unittest.TestCase):
 
     def test_no_sensitive_portal_grant_wording(self):
         body = app.render_page(verify()).decode()
-        self.assertIn("Δεν δημιουργήθηκε λογαριασμός", body)
+        self.assertIn("Κανένας χρήστης δεν δημιουργήθηκε", body)
 
-    def test_no_core_permissions(self):
+    def test_admin_only_core_read_permission(self):
         cfg = (BASE / "smart-pro-access-preflight" / "config.yaml").read_text()
-        for item in ("homeassistant_api:", "hassio_api:", "hassio_role:", "auth_api:", "map:", "ports:"):
+        for item in ("hassio_api:", "hassio_role:", "auth_api:", "map:", "ports:"):
             self.assertNotIn(item, cfg)
+        self.assertIn("homeassistant_api: true", cfg)
         self.assertIn("host_network: false", cfg)
         self.assertIn("panel_admin: false", cfg)
         self.assertIn("init: true", cfg)
@@ -140,7 +143,7 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.1.0", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.2.0", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):

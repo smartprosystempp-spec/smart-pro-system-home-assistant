@@ -1,6 +1,6 @@
 name: "Smart Pro Access Preflight — QA"
 description: "Προσωρινός ασφαλής έλεγχος αναγνώρισης διαχειριστή Home Assistant. Δεν δημιουργεί λογαριασμούς."
-version: "0.1.0"
+version: "0.2.0"
 slug: "smart_pro_access_preflight_qa"
 arch:
   - amd64
@@ -15,4 +15,5 @@ panel_icon: "mdi:shield-check-outline"
 panel_title: "Smart Pro Access QA"
 panel_admin: false
 host_network: false
+homeassistant_api: true
 schema: false
