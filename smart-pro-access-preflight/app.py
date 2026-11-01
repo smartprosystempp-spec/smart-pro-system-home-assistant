@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Strictly isolated, test-only HA user API round-trip; NOT customer access.
 
-QA 0.3.0 only: fresh admin Core proof, explicit one-use confirmation,
+QA 0.3.1 only: fresh admin Core proof, explicit one-use confirmation,
 then create and immediately delete a named temporary admin with NO credentials.
 Not Portal-integrated, not a permanent Smart Pro credential or grant.
 """
@@ -24,7 +24,7 @@ from ha_readback import AdminReadbackError, read_ha_admin_users
 from consent_qa import APPROVAL_WORD, issue, consume, allow_one_attempt, same_origin, attempted
 from account_roundtrip import run_qa_roundtrip, RoundTripError
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
 ROUND_TRIP_LOCK = threading.Lock()
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
@@ -148,6 +148,10 @@ def render_page(outcome: dict[str, str | bool], consent_token: str = "", result_
 <p>Η ενέργεια δημιουργεί προσωρινό μη-owner λογαριασμό με ομάδα διαχειριστών, αλλά <strong>χωρίς username ή κωδικό</strong>,
 ελέγχει την εγγραφή και τη διαγράφει αμέσως. Δεν δίνει δυνατότητα login στη Smart Pro.
 Σε διακοπή σύνδεσης μπορεί να παραμείνει εγγραφή, οπότε απαιτείται χειροκίνητος έλεγχος στην καρτέλα Χρήστες.</p>
+<form method='post' action='origin-check'>
+<button type='submit' class='probe-button'>1. Έλεγχος φόρμας χωρίς δημιουργία χρήστη</button>
+</form>
+<p class='note'>Πρώτα ελέγξτε την υποβολή χωρίς αλλαγές· στη συνέχεια, αν περάσει, ανανεώστε τη σελίδα πριν δοκιμάσετε τη δημιουργία.</p>
 <form method='post' action=''>
 <input type='hidden' name='csrf' value='{html.escape(consent_token, quote=True)}'>
 <label for='confirm'>Πληκτρολόγησε <b>{APPROVAL_WORD}</b> για εφάπαξ δοκιμή:</label>
@@ -170,10 +174,11 @@ p{{color:#c7d2e1}}.note{{font-size:.88rem;padding-top:15px;border-top:1px solid 
 .qa-action label{{display:block;font-size:.9rem;margin-bottom:8px}}
 .qa-action input{{display:block;width:100%;border:1px solid #7389a2;border-radius:8px;padding:10px;color:#111;background:#fff;font-size:1rem}}
 .qa-action button{{margin-top:12px;background:#3c83d5;color:white;border:0;border-radius:8px;padding:12px;font-weight:700}}
+.qa-action .probe-button{{background:#1b6f67;cursor:pointer}}
 </style></head><body><main><div class="k">SMART PRO SYSTEM · ΔΟΚΙΜΑΣΤΙΚΟΣ ΕΛΕΓΧΟΣ</div>
 <h1>{html.escape(title)}</h1><span class="status {badge_class}">{'ΕΠΙΤΥΧΙΑ' if ok else 'ΔΕΝ ΕΓΚΡΙΝΕΤΑΙ'}</span>
 <p>{html.escape(description)}</p><p class="note">Πρόκειται μόνο για δοκιμή ταυτότητας και ανάγνωσης δικαιωμάτων του Core. Δεν μεταφέρονται κωδικοί.
-Δεν συνδέεται με το Portal, δεν προσθέτει χρήστες και δεν αλλάζει το Managed Support.</p>
+Δεν συνδέεται με το Portal και δεν αλλάζει το Managed Support. Η δημιουργία/διαγραφή QA χρήστη απαιτεί ξεχωριστή ρητή έγκριση.</p>
 {consent_panel}
 <p class="note">Έκδοση QA {APP_VERSION} · Για επανέλεγχο ανανεώστε τη σελίδα.</p></main></body></html>""".encode("utf-8")
 
@@ -219,7 +224,8 @@ class Handler(BaseHTTPRequestHandler):
             self._write(status, render_page(outcome, token), "text/html; charset=utf-8")
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path != "/":
+        path = urlsplit(self.path).path
+        if path not in ("/", "/origin-check"):
             self._write(HTTPStatus.NOT_FOUND, b"Not found", "text/plain")
             return
         # ALWAYS perform a fresh local HA admin readback before touching consent.
@@ -228,7 +234,16 @@ class Handler(BaseHTTPRequestHandler):
             self._write(HTTPStatus.FORBIDDEN, b"Administrator verification required", "text/plain")
             return
         if not same_origin(self.headers):
-            self._write(HTTPStatus.FORBIDDEN, b"Invalid request origin", "text/plain")
+            self._write(HTTPStatus.FORBIDDEN, render_page(
+                outcome, result_message="origin_proof_rejected_no_write"),
+                "text/html; charset=utf-8")
+            return
+        if path == "/origin-check":
+            # Deliberately NO calls to consume(), allow_one_attempt() or
+            # run_qa_roundtrip(). The admin only tests the browser POST path.
+            self._write(HTTPStatus.OK, render_page(
+                outcome, result_message="origin_probe_passed_no_write"),
+                "text/html; charset=utf-8")
             return
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
             self._write(HTTPStatus.BAD_REQUEST, b"Invalid request content type", "text/plain")

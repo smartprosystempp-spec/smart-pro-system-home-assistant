@@ -1,6 +1,6 @@
 name: "Smart Pro Access Preflight — QA"
 description: "Δοκιμαστικός έλεγχος διαχειριστή και εφάπαξ δημιουργίας/διαγραφής προσωρινού χρήστη χωρίς κωδικό."
-version: "0.3.0"
+version: "0.3.1"
 slug: "smart_pro_access_preflight_qa"
 arch:
   - amd64

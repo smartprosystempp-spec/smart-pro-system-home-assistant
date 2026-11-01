@@ -44,17 +44,39 @@ def allow_one_attempt() -> bool:
 
 
 def same_origin(headers) -> bool:
-    """Require real browser Origin to match Host; tokens still bind authority."""
+    """Same-origin *browser* proof, compatible with Supervisor ingress proxy.
+
+    Host is often an internal proxy authority rather than the origin of the
+    iframe in the browser. An exact Origin==Host remains acceptable. When
+    proxying rewrites Host, require the browser-only Sec-Fetch-Site header to
+    say same-origin. Cross-site or same-site fetches always fail closed.
+
+    This is defense in depth alongside independent trusted Supervisor socket
+    peer, fresh Core admin readback, and the one-use CSRF+identity token. Never
+    treat browser-supplied forwarding headers as proof.
+    """
     origin = headers.get("Origin", "")
     host = headers.get("Host", "")
-    if not isinstance(origin, str) or not isinstance(host, str):
+    site = headers.get("Sec-Fetch-Site", "")
+    if not isinstance(origin, str) or not isinstance(host, str) or not isinstance(site, str):
+        return False
+    if site and site != "same-origin":
+        return False
+    if not host or any(c in host for c in "\r\n /\t"):
         return False
     try:
         parsed = urlsplit(origin)
     except ValueError:
         return False
-    return bool(parsed.scheme in ("http", "https") and parsed.netloc == host
-                and not parsed.path and not parsed.query and not parsed.fragment)
+    if (parsed.scheme not in ("http", "https") or not parsed.hostname or
+            not parsed.netloc or parsed.username or parsed.password or
+            parsed.path or parsed.query or parsed.fragment or
+            origin != parsed.scheme + "://" + parsed.netloc):
+        return False
+    # A browser may see HA's public origin while the add-on sees the ingress
+    # container Host. Only the non-forgeable browser Fetch Metadata can bridge
+    # that discrepancy; without it, an exact Origin/Host match is required.
+    return origin == parsed.scheme + "://" + host or site == "same-origin"
 
 
 def attempted() -> bool:

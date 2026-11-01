@@ -1,20 +1,22 @@
-SMART PRO ACCESS PREFLIGHT — 0.3.0 / STAGE 6 / INTERNAL QA
+SMART PRO ACCESS PREFLIGHT — 0.3.1 / STAGE 7 / INTERNAL QA
 ==========================================================
 Date: 2026-11-01
-Base: live-verified Smart Pro Access Preflight 0.2.0.
-Source files were compared with main repository Git blob hashes and matched.
+Base: Live-tested 0.3.0 (admin accepted, non-admin rejected; write POST blocked with Invalid request origin before invoking create).
 
-Python compileall: PASS
-Internal unit + local HTTP tests: PASS (93/93)
-Static command allow-list and no-auth-provider-credential scan: PASS
-Docker image build: NOT RUN
-Real Home Assistant 0.3.0 admin display: PENDING
-Real Home Assistant 0.3.0 non-admin rejection: PENDING
-Real user CREATE / DELETE: NOT PERFORMED; requires separately approved live QA
-Original Smart Pro System 3.0.28, Managed Support 3.19.2, Tunnel: UNCHANGED
-Portal / account credentials / secrets: UNCHANGED / NO WRITES
+Cause: Browser Origin may differ from proxy Host behind Home Assistant Ingress.
+Fix: Keep Origin validation plus browser Sec-Fetch-Site: same-origin, with fail-closed treatment of cross-site/same-site/null/missing Origin.
+Added: POST /origin-check read-only preflight; it cannot run account creation or deletion.
+Added: Friendly on-page 403 diagnostic rather than plain-text black iframe.
+Python compile: PASS
+Pure unit + local HTTP tests: PASS (98/98)
+Static checks: PASS
+Zip structure and integrity: PASS
+Docker/HA Supervisor runtime build: NOT PERFORMED INTERNALLY
+Real Home Assistant 0.3.1 origin probe: PENDING
+Live user CREATE / DELETE: NOT PERFORMED IN 0.3.0; DO NOT RETRY before read-only 0.3.1 test.
+Original Smart Pro System 3.0.28, Managed Support 3.19.2, Tunnel, Portal: NO CHANGES.
 
-Important: Account creation and deletion are not atomic.
-If interrupted, manually inspect HA Users for name prefix:
-Smart Pro QA TEMP NO LOGIN
-Never repeat if any such account exists; never remove unrelated users.
+First live step: Update only QA add-on, then click only
+"1. Έλεγχος φόρμας χωρίς δημιουργία χρήστη"
+Expected: origin_probe_passed_no_write, without creation or deletion.
+NEVER share ingress URLs, session cookies or tokens.

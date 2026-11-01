@@ -145,6 +145,13 @@ class ConsentTests(unittest.TestCase):
         self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example'}))
         self.assertFalse(consent_qa.same_origin({'Host':'ha.example'}))
         self.assertFalse(consent_qa.same_origin({'Origin':'null','Host':'ha.example'}))
+        self.assertTrue(consent_qa.same_origin({'Origin':'https://ha.example:8123','Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
+        self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example','Sec-Fetch-Site':'cross-site'}))
+        self.assertFalse(consent_qa.same_origin({'Origin':'https://evil.example','Host':'ha.example','Sec-Fetch-Site':'same-site'}))
+        self.assertFalse(consent_qa.same_origin({'Origin':'https://ha.example','Host':'supervisor:8107','Sec-Fetch-Site':'none'}))
+        self.assertFalse(consent_qa.same_origin({'Origin':'null','Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
+        self.assertFalse(consent_qa.same_origin({'Host':'supervisor:8107','Sec-Fetch-Site':'same-origin'}))
+        self.assertFalse(consent_qa.same_origin({'Origin':'https://ha.example','Host':'supervisor:8107'}))
 
 class HttpLiveGuardTests(unittest.TestCase):
     """Exercise actual HTTP app server, using locally mocked authenticated Core users."""
@@ -160,12 +167,12 @@ class HttpLiveGuardTests(unittest.TestCase):
     def setUp(self):
         with consent_qa._lock:
             consent_qa._issued.clear(); consent_qa._attempted=False
-    def post(self,body='csrf=x&confirm=%CE%94%CE%9F%CE%9A%CE%99%CE%9C%CE%97',extra=None):
+    def post(self,body='csrf=x&confirm=%CE%94%CE%9F%CE%9A%CE%99%CE%9C%CE%97',extra=None,path='/'):
         h={'Origin':f'http://127.0.0.1:{self.port}','Content-Type':'application/x-www-form-urlencoded',
            'X-Remote-User-Id':USER,'X-Remote-User-Groups':'system-admin'}
         if extra: h.update(extra)
         conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=3)
-        conn.request('POST','/',body=body,headers=h)
+        conn.request('POST',path,body=body,headers=h)
         res=conn.getresponse();data=res.read();status=res.status;conn.close();return status,data
     def test_direct_http_post_is_denied_no_action(self):
         with patch.object(app,'run_qa_roundtrip') as action:
@@ -190,6 +197,33 @@ class HttpLiveGuardTests(unittest.TestCase):
             replay,_=self.post(body)
             self.assertEqual(replay,403)
             self.assertEqual(action.call_count,1)
+    def test_proxy_host_with_real_browser_metadata_accepts_preflight_only(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}),patch.object(app,'run_qa_roundtrip') as action:
+            status,body=self.post(extra={'Origin':'https://ha.example','Sec-Fetch-Site':'same-origin'},path='/origin-check')
+            self.assertEqual(status,200)
+            self.assertIn(b'origin_probe_passed_no_write',body)
+            action.assert_not_called()
+            self.assertFalse(consent_qa.attempted())
+    def test_origin_probe_denies_cross_site_without_write(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}),patch.object(app,'run_qa_roundtrip') as action:
+            status,body=self.post(extra={'Origin':'https://evil.example','Sec-Fetch-Site':'cross-site'},path='/origin-check')
+            self.assertEqual(status,403)
+            self.assertIn(b'origin_proof_rejected_no_write',body)
+            action.assert_not_called()
+    def test_origin_probe_rejects_normal_user(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':False,'reason':'non_admin'}),patch.object(app,'run_qa_roundtrip') as action:
+            status,_=self.post(extra={'Origin':'https://ha.example','Sec-Fetch-Site':'same-origin'},path='/origin-check')
+            self.assertEqual(status,403)
+            action.assert_not_called()
+    def test_origin_probe_has_read_only_form(self):
+        page=app.render_page({'is_admin':True,'reason':'verified'},'ABC').decode()
+        self.assertIn("action='origin-check'",page)
+        self.assertIn('Έλεγχος φόρμας χωρίς δημιουργία χρήστη',page)
+    def test_real_create_would_still_require_explicit_confirmation(self):
+        with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'verified'}),patch.object(app,'run_qa_roundtrip') as action:
+            status,_=self.post(extra={'Origin':'https://ha.example','Sec-Fetch-Site':'same-origin'})
+            self.assertEqual(status,403)
+            action.assert_not_called()
     def test_invalid_origin_denied(self):
         token=consent_qa.issue(USER)
         body=urllib.parse.urlencode({'csrf':token,'confirm':'ΔΟΚΙΜΗ'})
