@@ -14,8 +14,8 @@ import re
 from collections.abc import Mapping, Sequence
 
 TRUSTED_INGRESS_PEER = "172.30.32.2"
-INSTALLATION_RE = re.compile(r"ID-[0-9]{1,12}\\Z")
-USER_ID_RE = re.compile(r"[A-Za-z0-9_-]{16,128}\\Z")
+INSTALLATION_RE = re.compile(r"ID-[0-9]{1,12}\Z")
+USER_ID_RE = re.compile(r"[A-Za-z0-9_-]{16,128}\Z")
 
 
 def _denied(reason):
