@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Smart Pro customer administrator preflight, strictly read-only.
+"""Strictly isolated, test-only HA user API round-trip; NOT customer access.
 
-This disposable QA app has no Home Assistant or Supervisor API token, no
-account/user write code, and no stateful storage. It must only be opened via
-Home Assistant Supervisor Ingress. Do not reuse this preflight as consent to
-provision an account: a new consent flow and its own reviewed gate are needed.
+QA 0.3.0 only: fresh admin Core proof, explicit one-use confirmation,
+then create and immediately delete a named temporary admin with NO credentials.
+Not Portal-integrated, not a permanent Smart Pro credential or grant.
 """
 
 from __future__ import annotations
@@ -14,14 +13,19 @@ import ipaddress
 import json
 import os
 import re
+import threading
+from urllib.parse import parse_qs
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 from urllib.parse import urlsplit
 
 from ha_readback import AdminReadbackError, read_ha_admin_users
+from consent_qa import APPROVAL_WORD, issue, consume, allow_one_attempt, same_origin, attempted
+from account_roundtrip import run_qa_roundtrip, RoundTripError
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
+ROUND_TRIP_LOCK = threading.Lock()
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
 USER_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,128}\Z")
@@ -111,13 +115,15 @@ def verify_live_core_admin(peer_ip: str, headers: Mapping[str, str], *,
     return {"is_admin": True, "reason": "admin_and_core_verified_read_only"}
 
 
-def render_page(outcome: dict[str, str | bool]) -> bytes:
+def render_page(outcome: dict[str, str | bool], consent_token: str = "", result_message: str = "") -> bytes:
     ok = outcome["is_admin"] is True
     if ok:
         title = "Διαχειριστής Home Assistant — επιβεβαιώθηκε και από το Core"
         description = (
             "Το Home Assistant αναγνώρισε τον διαχειριστή και επέτρεψε την ασφαλή ανάγνωση "
-            "των δικαιωμάτων χρηστών μέσω Core API. Κανένας χρήστης δεν δημιουργήθηκε ή τροποποιήθηκε."
+            "των δικαιωμάτων χρηστών μέσω Core API. " +
+            ("Η δοκιμή δημιουργίας/διαγραφής εκτελέστηκε· το αποτέλεσμα εμφανίζεται παρακάτω. "
+             if result_message else "Κανένας χρήστης δεν δημιουργήθηκε ή τροποποιήθηκε.")
         )
         badge_class = "ok"
     else:
@@ -135,6 +141,21 @@ def render_page(outcome: dict[str, str | bool]) -> bytes:
         else:
             description = "Το Home Assistant δεν επέστρεψε επαρκή στοιχεία για ασφαλή επιβεβαίωση."
         badge_class = "blocked"
+    consent_panel = ""
+    if ok and consent_token:
+        consent_panel = f"""<section class='qa-action'>
+<h2>Δοκιμή δημιουργίας και άμεσης διαγραφής (μόνο στο test HA)</h2>
+<p>Η ενέργεια δημιουργεί προσωρινό μη-owner λογαριασμό με ομάδα διαχειριστών, αλλά <strong>χωρίς username ή κωδικό</strong>,
+ελέγχει την εγγραφή και τη διαγράφει αμέσως. Δεν δίνει δυνατότητα login στη Smart Pro.
+Σε διακοπή σύνδεσης μπορεί να παραμείνει εγγραφή, οπότε απαιτείται χειροκίνητος έλεγχος στην καρτέλα Χρήστες.</p>
+<form method='post' action=''>
+<input type='hidden' name='csrf' value='{html.escape(consent_token, quote=True)}'>
+<label for='confirm'>Πληκτρολόγησε <b>{APPROVAL_WORD}</b> για εφάπαξ δοκιμή:</label>
+<input id='confirm' name='confirm' autocomplete='off' maxlength='20' required>
+<button type='submit'>Έγκριση ελεγχόμενης δοκιμής</button>
+</form></section>"""
+    if result_message:
+        consent_panel = "<section class='qa-action'><p><strong>Αποτέλεσμα:</strong> " + html.escape(result_message) + "</p><p>Ελέγξτε τη λίστα χρηστών του Home Assistant πριν από νέα δοκιμή.</p></section>"
     return f"""<!doctype html>
 <html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>Smart Pro Access — QA</title>
@@ -144,10 +165,16 @@ main{{max-width:610px;margin:8vh auto;padding:26px;border:1px solid #354254;bord
 h1{{font-size:1.42rem;line-height:1.35;margin:.5rem 0 1rem}}.k{{font-weight:700;letter-spacing:.05em;color:#b6c6da;font-size:.78rem}}
 .status{{display:inline-block;border-radius:100px;padding:5px 11px;font-size:.82rem;font-weight:700}}.ok{{background:#173d32;color:#a8f1c5}}.blocked{{background:#50302d;color:#ffcbc3}}
 p{{color:#c7d2e1}}.note{{font-size:.88rem;padding-top:15px;border-top:1px solid #354254}}
+.qa-action{{margin-top:20px;padding:16px;border:1px solid #5d718d;border-radius:12px}}
+.qa-action h2{{font-size:1.08rem;margin:0 0 10px}}
+.qa-action label{{display:block;font-size:.9rem;margin-bottom:8px}}
+.qa-action input{{display:block;width:100%;border:1px solid #7389a2;border-radius:8px;padding:10px;color:#111;background:#fff;font-size:1rem}}
+.qa-action button{{margin-top:12px;background:#3c83d5;color:white;border:0;border-radius:8px;padding:12px;font-weight:700}}
 </style></head><body><main><div class="k">SMART PRO SYSTEM · ΔΟΚΙΜΑΣΤΙΚΟΣ ΕΛΕΓΧΟΣ</div>
 <h1>{html.escape(title)}</h1><span class="status {badge_class}">{'ΕΠΙΤΥΧΙΑ' if ok else 'ΔΕΝ ΕΓΚΡΙΝΕΤΑΙ'}</span>
 <p>{html.escape(description)}</p><p class="note">Πρόκειται μόνο για δοκιμή ταυτότητας και ανάγνωσης δικαιωμάτων του Core. Δεν μεταφέρονται κωδικοί.
 Δεν συνδέεται με το Portal, δεν προσθέτει χρήστες και δεν αλλάζει το Managed Support.</p>
+{consent_panel}
 <p class="note">Έκδοση QA {APP_VERSION} · Για επανέλεγχο ανανεώστε τη σελίδα.</p></main></body></html>""".encode("utf-8")
 
 
@@ -168,7 +195,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'")
         self.end_headers()
         self.wfile.write(data)
 
@@ -184,10 +211,71 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"version": APP_VERSION, **outcome}, separators=(",", ":")).encode()
             self._write(status, body, "application/json; charset=utf-8")
         else:
-            self._write(status, render_page(outcome), "text/html; charset=utf-8")
+            if outcome["is_admin"]:
+                values = [v for k, v in self.headers.items() if k.lower() == "x-remote-user-id"]
+                token = issue(values[0]) if len(values) == 1 and not attempted() else ""
+            else:
+                token = ""
+            self._write(status, render_page(outcome, token), "text/html; charset=utf-8")
 
     def do_POST(self) -> None:
-        self._write(HTTPStatus.METHOD_NOT_ALLOWED, b"Read-only QA", "text/plain")
+        if urlsplit(self.path).path != "/":
+            self._write(HTTPStatus.NOT_FOUND, b"Not found", "text/plain")
+            return
+        # ALWAYS perform a fresh local HA admin readback before touching consent.
+        outcome = verify_live_core_admin(self.client_address[0], self.headers)
+        if outcome["is_admin"] is not True:
+            self._write(HTTPStatus.FORBIDDEN, b"Administrator verification required", "text/plain")
+            return
+        if not same_origin(self.headers):
+            self._write(HTTPStatus.FORBIDDEN, b"Invalid request origin", "text/plain")
+            return
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/x-www-form-urlencoded":
+            self._write(HTTPStatus.BAD_REQUEST, b"Invalid request content type", "text/plain")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+            if not 0 < length <= 512:
+                raise ValueError()
+            values = parse_qs(self.rfile.read(length).decode("utf-8", "strict"),
+                              keep_blank_values=True, strict_parsing=True, max_num_fields=3)
+        except (ValueError, UnicodeDecodeError):
+            self._write(HTTPStatus.BAD_REQUEST, b"Invalid request body", "text/plain")
+            return
+        if set(values) != {"csrf", "confirm"} or any(len(v) != 1 for v in values.values()):
+            self._write(HTTPStatus.BAD_REQUEST, b"Invalid request fields", "text/plain")
+            return
+        identity_values = [v for k, v in self.headers.items() if k.lower() == "x-remote-user-id"]
+        if len(identity_values) != 1 or not consume(values["csrf"][0], identity_values[0], values["confirm"][0]):
+            self._write(HTTPStatus.FORBIDDEN, b"Approval expired or invalid", "text/plain")
+            return
+        if not ROUND_TRIP_LOCK.acquire(blocking=False):
+            self._write(HTTPStatus.CONFLICT, b"Another QA operation in progress", "text/plain")
+            return
+        try:
+            if not allow_one_attempt():
+                self._write(HTTPStatus.CONFLICT, b"QA attempt already used; inspect users first", "text/plain")
+                return
+            try:
+                code = run_qa_roundtrip(supervisor_token=os.environ.get("SUPERVISOR_TOKEN", ""))
+            except RoundTripError as error:
+                known_codes = {
+                    "qa_suffix_invalid", "core_auth_unavailable", "core_challenge_invalid",
+                    "core_auth_denied", "command_not_allowed", "core_reply_invalid",
+                    "core_command_rejected", "inventory_invalid", "existing_qa_account_stop",
+                    "create_result_uncertain_check_users", "create_id_uncertain_check_users",
+                    "created_user_readback_mismatch", "created_user_permissions_mismatch",
+                    "unexpected_credentials_attached", "cleanup_uncertain_check_users",
+                    "cleanup_not_confirmed_check_users", "core_roundtrip_failed_check_users",
+                }
+                code = str(error) if str(error) in known_codes else "unexpected_error_check_users"
+            except Exception:
+                code = "unexpected_error_check_users"
+            # Fixed, nonsecret outcome; never print HA IDs or inventory.
+            self._write(HTTPStatus.OK, render_page(outcome, result_message=code),
+                        "text/html; charset=utf-8")
+        finally:
+            ROUND_TRIP_LOCK.release()
 
     do_PUT = do_POST
     do_PATCH = do_POST
@@ -202,7 +290,7 @@ class Server(ThreadingHTTPServer):
 def main() -> None:
     # Deliberately no host port publication; Supervisor ingress is the sole path.
     with Server(("0.0.0.0", PORT), Handler) as server:
-        print(f"[smart-pro-access-qa] {APP_VERSION} ready; read-only Core admin proof; ingress-only", flush=True)
+        print(f"[smart-pro-access-qa] {APP_VERSION} ready; TEST-ONLY one-use user roundtrip; ingress-only", flush=True)
         server.serve_forever()
 
 

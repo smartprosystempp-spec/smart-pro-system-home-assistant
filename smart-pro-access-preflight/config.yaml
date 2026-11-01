@@ -1,6 +1,6 @@
 name: "Smart Pro Access Preflight — QA"
-description: "Προσωρινός ασφαλής έλεγχος αναγνώρισης διαχειριστή Home Assistant. Δεν δημιουργεί λογαριασμούς."
-version: "0.2.0"
+description: "Δοκιμαστικός έλεγχος διαχειριστή και εφάπαξ δημιουργίας/διαγραφής προσωρινού χρήστη χωρίς κωδικό."
+version: "0.3.0"
 slug: "smart_pro_access_preflight_qa"
 arch:
   - amd64

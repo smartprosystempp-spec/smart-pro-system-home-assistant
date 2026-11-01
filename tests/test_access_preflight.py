@@ -99,10 +99,13 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("panel_admin: false", cfg)
         self.assertIn("init: true", cfg)
 
-    def test_no_persistent_or_auth_writes(self):
+    def test_privileged_commands_isolated_in_lab_module(self):
         source = APP.read_text()
-        for command in ("config/auth/create", "config/auth_provider/homeassistant/create", "async_create_user", "os.environ['SUPERVISOR_TOKEN']"):
-            self.assertNotIn(command, source)
+        self.assertNotIn("config/auth/create", source)
+        self.assertNotIn("config/auth_provider/homeassistant/create", source)
+        writer=(BASE/"smart-pro-access-preflight"/"account_roundtrip.py").read_text()
+        self.assertIn("config/auth/create", writer)
+        self.assertNotIn("config/auth_provider/homeassistant/create", writer)
 
 
 class RealLocalHttpTests(unittest.TestCase):
@@ -143,13 +146,13 @@ class RealLocalHttpTests(unittest.TestCase):
         status, body, _ = self.request("/status?ignored=true")
         self.assertEqual(status, 403)
         obj = json.loads(body)
-        self.assertEqual(obj, {"version": "0.2.0", "is_admin": False, "reason": "untrusted_source"})
+        self.assertEqual(obj, {"version": "0.3.0", "is_admin": False, "reason": "untrusted_source"})
         self.assertNotIn(USER.encode(), body)
 
     def test_http_post_denied(self):
         status, body, _ = self.request("/", method="POST")
-        self.assertEqual(status, 405)
-        self.assertEqual(body, b"Read-only QA")
+        self.assertEqual(status, 403)
+        self.assertEqual(body, b"Administrator verification required")
 
     def test_http_unknown_route_404(self):
         status, _, _ = self.request("/admin/create-user")
@@ -157,7 +160,7 @@ class RealLocalHttpTests(unittest.TestCase):
 
     def test_http_delete_denied(self):
         status, _, _ = self.request("/", method="DELETE")
-        self.assertEqual(status, 405)
+        self.assertEqual(status, 403)
 
 
 if __name__ == "__main__":
