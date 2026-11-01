@@ -54,3 +54,27 @@ This does **not** establish Internet exposure, but it means the current local br
 ## Release discipline
 
 Changes must be planned against the entire repository, not just `smart-pro-managed-support/`. Update only the actually affected add-ons and their relevant metadata, README/changelog, tests, image workflow tags, Portal counterpart and QA notes. **Do not bump or rebuild unrelated add-ons by default.** No automatic installation or merge to `main`.
+
+## Stage 1A checkpoint — HA admin identity gate (2026-11-01)
+
+**Scope:** Administrator-only subscriber flow. A customer who has only a non-administrator Home Assistant account cannot authorize Smart Pro to create a support administrator. Any later installer-to-customer approval/delegation flow is a separate project, **explicitly deferred**.
+
+Official current Home Assistant ingress documentation confirms that the Supervisor supplies `X-Remote-User-Id` after authenticated ingress and strips untrusted inbound identity headers. This identity is trustworthy **only when the add-on restricts incoming requests to the Supervisor peer `172.30.32.2`**. The supported Home Assistant `config/auth/list` command exposes authoritative `id`, `is_active`, `system_generated`, `is_owner`, and `group_ids`, through its admin-protected WebSocket API.
+
+Documentation:
+- https://contributors.home-assistant.io/apps/guides/ingress/
+- https://contributors.home-assistant.io/apps/guides/security/
+- https://contributors.home-assistant.io/apps/supervisor-api/core/
+- https://github.com/home-assistant/core/blob/dev/homeassistant/components/config/auth.py
+
+**Chosen candidate flow:** Portal initiates request → customer opens Smart Pro System's Home Assistant ingress page (Home Assistant login if needed) → local, authenticated Home Assistant administrator identity is checked → admin confirms the exact installation and purpose → Portal receives only the limited result. No normal-user fallback, no Portal-provided role flags, no administrative secret shared through the browser.
+
+**Read-only proof-of-policy committed:**
+- `tests/customer_access_admin_gate.py` — intentionally independent test-only gate, NOT imported by either add-on
+- `tests/test_customer_managed_access_admin_gate.py` — 17 isolated admin/owner, normal-user, spoofed-header, inactive/service-account and installation mismatch scenarios
+
+The gate only returns `eligible_for_next_step`, NEVER an active grant or a created account. Its `ha_users` argument MUST eventually be populated by an independent, authenticated server-side Home Assistant readback; returning a browser-supplied list would invalidate the entire model. This readback and the actual request/consent binding are **not yet wired**.
+
+**Critical pre-deployment blocker:** The existing `smart-pro-system` uses `host_network: true` and the current web server binds to all network interfaces. Before any ingress identity header becomes an authorization input, the account-approval HTTP entry point must be isolated from direct LAN/host reachability and verified to accept the actual Supervisor source peer only. Existing endpoints must remain compatible. A user should never be able to spoof the approval headers via a direct HTTP request. Validate in a controlled HA test installation first.
+
+No add-on runtime changed; no credentials were handled; no Home Assistant user was created. Both add-on version numbers remain the same.
