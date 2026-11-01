@@ -1,3 +1,29 @@
-Smart Pro System 3.0.28 — GitHub changed files only (not Home Assistant install ZIP).
+# Smart Pro Access Preflight — QA 0.1.0
 
-Install files preserving paths, including .github/workflows/publish-smart-pro-system.yml. Build amd64/aarch64 + manifest then update add-on. Paired with Portal 3.6.353. No backup I/O added except one read-only info GET after collision; no restore/delete/overwrite.
+Ελεγχόμενο, ανεξάρτητο **προσωρινό πρόσθετο QA**, μέσα στο ίδιο repository του Smart Pro System. Είναι μόνο για να διαπιστώσουμε σε πραγματικό Home Assistant ότι το Supervisor Ingress αναγνωρίζει τον διαχειριστή και απορρίπτει έναν απλό χρήστη.
+
+- Δεν προσθέτει, αφαιρεί ή αλλάζει χρήστες.
+- Δεν απαιτεί `homeassistant_api`, `hassio_api`, password, token, πρόσβαση δικτύου host, αρχεία `/data` ή Portal.
+- Δεν αλλάζει τα υπάρχοντα Smart Pro System 3.0.28, Managed Support 3.19.2 ή Smart Pro Tunnel.
+- Επιστρέφει μόνο «διαχειριστής/όχι διαχειριστής» (χωρίς ονόματα, user IDs ή άλλες προσωπικές πληροφορίες).
+- Δέχεται μόνο αιτήματα που φτάνουν από τη διεύθυνση Supervisor Ingress `172.30.32.2` και χρησιμοποιεί μόνο τα headers ταυτότητας/ρόλου που παράγει το Supervisor.
+
+**Αυτό ΔΕΝ είναι η τελική πρόσβαση Smart Pro.** Δεν αποτελεί έγκριση, δεν φυλάσσει κωδικό, δεν χορηγεί τεχνικά δικαιώματα. Προηγείται του ασφαλούς σχεδιασμού της δημιουργίας λογαριασμού.
+
+## Real-installation QA
+
+1. Προσθέστε τα αρχεία του ZIP στο υπάρχον GitHub repository, **διατηρώντας τη δομή φακέλων**. Η βασική έκδοση δεν αλλάζει.
+2. Στο *δοκιμαστικό Home Assistant* κάντε επαναφόρτωση του αποθετηρίου πρόσθετων και εγκαταστήστε μόνο το **Smart Pro Access Preflight — QA**. Απαιτείται σύνδεση στο Internet για τη λήψη του Python base image κατά το πρώτο build.
+3. Κάντε **Start** και **Open Web UI** ως διαχειριστής. Αναμένεται πράσινη «Διαχειριστής Home Assistant — επιβεβαιώθηκε».
+4. Ανοίξτε το ίδιο πρόσθετο μέσα από Home Assistant ως **ξεχωριστός απλός χρήστης**, όχι από απευθείας URL σε θύρα. Αναμένεται «Δεν επιβεβαιώθηκε διαχειριστής».
+5. Ελέγξτε ότι δεν προστέθηκε χρήστης στο Home Assistant και ότι η Managed σύνδεση παραμένει ίδια. Εάν παρατηρηθεί αδυναμία φόρτωσης, αντιγράψτε **μόνο το μη ευαίσθητο μήνυμα σφάλματος** (όχι cookies/URLs ingress/token).
+
+⚠️ Αν ο λογαριασμός QA δεν έχει δικαίωμα ανοίγματος του panel, καταγράψτε το αποτέλεσμα· **μην** του δώσετε δικαιώματα διαχειριστή για να ολοκληρώσετε το test.
+
+## Rollback
+
+Μπορείτε να σταματήσετε/απεγκαταστήσετε μόνο το προσωρινό πρόσθετο **Smart Pro Access Preflight — QA**. Δεν πειράζετε άλλα addons, pairing, `/data` ή την υπηρεσία Managed Support.
+
+## Technical notes
+
+Uses exact Supervisor peer 172.30.32.2 plus the sanitized `X-Remote-User-Id` and `X-Remote-User-Groups` headers. `system-admin` is an exact group match; δεν αρκούν παρόμοια ή μερικά ονόματα ομάδων. Δεν αποθηκεύονται στοιχεία χρηστών.
