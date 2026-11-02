@@ -1,6 +1,6 @@
 name: "Smart Pro System"
 description: "Κέντρο σύνδεσης, κατάστασης και υπηρεσιών Smart Pro System για Home Assistant."
-version: "3.0.28"
+version: "3.0.29"
 slug: "smart_pro_tools"
 init: false
 panel_icon: "mdi:home-cog"
@@ -19,7 +19,7 @@ map:
 arch:
   - aarch64
   - amd64
-  
+
 image: "ghcr.io/smartprosystempp-spec/smart-pro-system"
 
 options:
@@ -30,6 +30,7 @@ options:
   portal_basic_password: ""
   managed_backup_s3_access_key: ""
   managed_backup_s3_secret_key: ""
+  ha_credential_handoff_qa_enabled: false
 
 schema:
   ha_token: password
@@ -39,3 +40,4 @@ schema:
   portal_basic_password: password
   managed_backup_s3_access_key: password
   managed_backup_s3_secret_key: password
+  ha_credential_handoff_qa_enabled: bool

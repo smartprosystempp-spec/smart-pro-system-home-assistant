@@ -15,4 +15,5 @@ fi
 printf '%s\n' "[INFO] Τα Home Assistant API credentials παραμένουν μόνο στην πλευρά του server."
 printf '%s\n' "[INFO] Εκκίνηση Smart Pro System..."
 
+python3 -u ha_credential_handoff_qa_agent.py &
 exec python3 -u app.py
