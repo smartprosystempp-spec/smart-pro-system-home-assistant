@@ -7638,6 +7638,10 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         request_path = urllib.parse.urlparse(self.path).path
+        if request_path.endswith('/api/sp-customer-admin/status'):
+            import sp_customer_admin_access as _customer_access
+            _customer_access.status(self, load_portal_connection())
+            return
 
         if request_path.endswith('/api/smart_updates_test/state'):
             if not tech_session_authorized(self):
@@ -7732,6 +7736,10 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         else: super().do_GET() 
 
     def do_POST(self):
+        if urllib.parse.urlparse(self.path).path.endswith('/api/sp-customer-admin/action'):
+            import sp_customer_admin_access as _customer_access
+            _customer_access.action(self, load_portal_connection())
+            return
         if urllib.parse.urlparse(self.path).path.endswith('/api/portal_pair'):
             try:
                 data = read_json_body(self)
