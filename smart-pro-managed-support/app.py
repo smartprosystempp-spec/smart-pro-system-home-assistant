@@ -144,6 +144,7 @@ CANARY_WORKER_ACTIVE = False
 PERSISTENT_WORKER_LOCK = threading.Lock()
 PERSISTENT_WORKER_ACTIVE = False
 PERSISTENT_STOP_EVENT = threading.Event()
+PROCESS_SHUTDOWN = threading.Event()
 MIGRATION_CANARY_WORKER_LOCK = threading.Lock()
 MIGRATION_CANARY_WORKER_ACTIVE = False
 IDENTITY_RESEED_WORKER_LOCK = threading.Lock()
@@ -3353,7 +3354,7 @@ def unattended_supervisor():
     """
     time.sleep(UNATTENDED_STARTUP_DELAY)
     last_log = None
-    while True:
+    while not PROCESS_SHUTDOWN.is_set():
         control = load_unattended_control()
         if not control.get('enabled'):
             time.sleep(5); continue
@@ -3441,6 +3442,8 @@ def unattended_supervisor():
                     last_log = reason
                 time.sleep(10); continue
 
+        if PROCESS_SHUTDOWN.is_set():
+            break
         try:
             start_persistent_runtime()
             print('[managed] unattended supervisor started continuous foreground runtime using existing stable identity', flush=True)
@@ -3827,6 +3830,8 @@ def persistent_runtime_worker():
 def start_persistent_runtime():
     global PERSISTENT_WORKER_ACTIVE
     with PERSISTENT_WORKER_LOCK:
+        if PROCESS_SHUTDOWN.is_set():
+            raise RuntimeError('managed_shutdown_in_progress|Το πρόσθετο τερματίζεται.')
         if PERSISTENT_WORKER_ACTIVE:
             raise RuntimeError('persistent_runtime_already_running|Η συνεχής Managed λειτουργία εκτελείται ήδη.')
         if CANARY_WORKER_ACTIVE:
@@ -7059,6 +7064,32 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def _request_process_shutdown(_signal_number, _frame):
+    PROCESS_SHUTDOWN.set()
+    PERSISTENT_STOP_EVENT.set()
+
+
+def _serve_until_shutdown(server):
+    previous_term = signal.signal(signal.SIGTERM, _request_process_shutdown)
+    previous_int = signal.signal(signal.SIGINT, _request_process_shutdown)
+    stopper = threading.Thread(target=lambda: (PROCESS_SHUTDOWN.wait(), server.shutdown()),
+                               name="managed-http-shutdown", daemon=True)
+    try:
+        stopper.start()
+        server.serve_forever(poll_interval=0.2)
+    finally:
+        PROCESS_SHUTDOWN.set()
+        PERSISTENT_STOP_EVENT.set()
+        stopper.join(timeout=2)
+        for worker in threading.enumerate():
+            if worker.name == "managed-continuous-runtime" and worker is not threading.current_thread():
+                worker.join(timeout=5)
+        server.server_close()
+        signal.signal(signal.SIGTERM, previous_term)
+        signal.signal(signal.SIGINT, previous_int)
+        print("[managed] server closed after requested process shutdown", flush=True)
+
+
 if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[managed] Smart Pro Managed Support {VERSION} UI consolidation consumer listening on {PORT}", flush=True)
@@ -7092,10 +7123,10 @@ if __name__ == "__main__":
                 flush=True
             )
 
-        ThreadingHTTPServer(
+        _serve_until_shutdown(ThreadingHTTPServer(
             ("0.0.0.0", PORT),
             Handler
-        ).serve_forever()
+        ))
 
     finally:
         if router_compat_started:
