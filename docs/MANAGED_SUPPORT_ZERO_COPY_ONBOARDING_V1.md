@@ -54,3 +54,10 @@ Do not ship an isolated Broker or Managed Support build for this feature. The pl
 - 22/22 isolated ledger tests PASS and all Broker PHP files lint PASS, single-root ZIP integrity PASS.
 - **The reservation is not an identity claim, and does not start provisioning.** No route or UI calls the method; no database migration has occurred on any installation. Package is INTERNAL / DO NOT INSTALL.
 - Remaining critical work: signed Portal approval transport, bound client handoff and an atomic Broker identity claim with lost-response reconciliation; previous real-client tests must not be repeated before a coordinated release.
+
+## Internal Broker 0.60.35 — server-derived pairing binding + atomic claim lock
+- QA source artifact: `smart-pro-remote-session-broker-0.60.35-zero-copy-atomic-claim-lock-INTERNAL-DO-NOT-INSTALL.zip`, SHA-256 `421ab6654396fb7c58599326e7bbb4b2ffacc3bd2a5a57971f808a8f003ba889`.
+- Important improvement over 0.60.34: the reservation's device-binding digest is **computed server-side** from the current canonical Portal pairing token lookup/hash; callers can no longer choose arbitrary SHA-256 fingerprints. Rotation of Portal pairing invalidates old claims.
+- Adds an **unwired** `lock_first_claim()` internal method: exact installation/request ID, current Portal pairing digest, matching server-signed attestation, unexpired approval, fresh entitlement/Tools state, and atomic SQL CAS from `pending_handoff` to `claim_locked`. Unknown outcomes and repetitions remain fail-closed; no automatic retries.
+- Offline PHP lint: all 27 plugin PHP files PASS; isolated lock-gate tests 39/39 PASS; ZIP single-root integrity PASS. Broker REST, node identity writers, MeshCentral and other services unchanged; no data migration beyond the prior internal reservation schema.
+- **Not sufficient for a production activation:** the signed attestation alone is NOT a device authentication proof. A dedicated authenticated Portal-to-Tools handoff and independent client proof must exist before exposing any new REST claim route or issuing an identity. No public signer, client secret, claim endpoint, identity creation or runtime activation is included.
