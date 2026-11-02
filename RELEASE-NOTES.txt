@@ -1,0 +1,39 @@
+Smart Pro Customer Admin Access - paired automatic handoff pilot
+=============================================================
+DO NOT deploy to real customer installations yet.
+Portal 3.6.399 paired with Smart Pro System 3.0.30 pilot.
+The Access Preflight QA add-on remains untouched.
+
+FUNCTION:
+- HA admin, confirmed by trusted Supervisor Ingress identity AND fresh Core auth list,
+  approves a distinct local-only Smart Pro pilot admin account.
+- No manual ticket, no password or token visible in browser.
+- Existing installation pairing token, never returned to browser, authenticates
+  an auto-arm request scoped to this exact Installation ID.
+- Temporary X25519 public key returned, account created only after readiness.
+- Password sealed with PyNaCl and sent to the Portal; WordPress stores only a
+  15-minute encrypted transient and returns an opaque delivery acknowledgement.
+- WordPress admin reveals, copies, acknowledges and clears the temporary secret.
+- Revocation requires a separate real Home Assistant administrator approval.
+
+SAFETY GATES:
+- Do NOT assume local Ingress peer identity on the main host-network add-on is
+  identical to the old QA add-on until verified in LIVE read-only QA.
+- The new account has local_only=true, is limited to a distinct pilot name, and
+  has no MeshCentral technician session side effects.
+- If Plesk/site-lock denies the REST endpoint, preflight fails BEFORE user creation.
+- On ambiguous result after creation: no automatic retry or auto-delete; use
+  the explicit revoke after inspecting the Home Assistant user list.
+- Previous QA LOGIN LAB account is separate; neither touched nor reused.
+- Requires live HA image build, browser ingress verification, and failure-path QA.
+
+GITHUB HANDOFF:
+1. Upload the folder smart-pro-system and .github/workflows from the overlay ZIP
+   to main, but do not run Publish image yet.
+2. Existing app.py and index.html need TWO exact route inserts and ONE script
+   tag. APPLY_IN_LOCAL_REPOSITORY.py handles this with validation in a clone;
+   alternatively ChatGPT can perform those three bounded edits through the
+   connected GitHub integration AFTER your upload and explicit go-ahead.
+3. Do not install or run the build until all new files and routing edits pass.
+
+WordPress ZIP is standalone and updates the EXISTING Portal, not a new plugin.
