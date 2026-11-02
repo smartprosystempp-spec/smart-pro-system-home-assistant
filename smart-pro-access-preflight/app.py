@@ -25,9 +25,10 @@ from consent_qa import (APPROVAL_WORD, REVOKE_WORD, issue, consume, attempted,
 from persistent_qa import (inspect_retained, create_retained, revoke_retained,
                            RetainedAccountError)
 from credential_lab_qa import (inspect_lab, create_lab, revoke_lab, LabCredentialError)
-from consent_qa import LAB_CREATE_WORD, LAB_REVOKE_WORD
+from consent_qa import LAB_CREATE_WORD, LAB_REVOKE_WORD, HANDOFF_WORD
+from secure_handoff_qa import deliver_laboratory_account, HandoffError
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 ROUND_TRIP_LOCK = threading.Lock()
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
@@ -179,7 +180,7 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
                 create_token: str = '', revoke_token: str = '',
                 classification: dict[str, str] | None = None,
                 lab_state: str = "unknown", lab_create_token: str = "",
-                lab_revoke_token: str = "") -> bytes:
+                lab_revoke_token: str = "", handoff_token: str = "") -> bytes:
     """Never render target IDs, access secrets, or a write action for non-admins."""
     ok = outcome['is_admin'] is True
     title = ('Διαχειριστής Home Assistant — επιβεβαιώθηκε και από το Core'
@@ -236,20 +237,23 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
     if ok:
         label = {
             'absent':'Δεν υπάρχει ο ειδικός δοκιμαστικός λογαριασμός με login.',
-            'login_ready':'Ο δοκιμαστικός διαχειριστής έχει username και password. Ο κωδικός εμφανίστηκε ΜΟΝΟ κατά τη δημιουργία.',
+            'login_ready':'Ο δοκιμαστικός διαχειριστής έχει username και password. Τα στοιχεία δημιουργήθηκαν για την ασφαλή παράδοση στο Portal.',
             'incomplete_no_login':'Εντοπίστηκε ημιτελής δοκιμαστικός λογαριασμός χωρίς login· επιτρέπεται μόνο ανάκληση.',
             'review_required':'Αμφίβολα στοιχεία λογαριασμού: μόνο χειροκίνητος έλεγχος.',
             'readback_unavailable':'Δεν ήταν διαθέσιμος ο έλεγχος λογαριασμού. Καμία ενέργεια.',
         }.get(lab_state, 'Άγνωστη κατάσταση· καμία ενέργεια.')
         lab_panel = '<section><h2>2. Ασφαλής δοκιμή πραγματικού login (μόνο TEST HA)</h2><p>' + html.escape(label) + '</p>'
-        lab_panel += '<p class="note">Νέος απομονωμένος χρήστης με διαχειριστικά δικαιώματα, αλλά ΜΟΝΟ τοπική πρόσβαση. Το password δημιουργείται τυχαία και εμφανίζεται μία φορά αποκλειστικά εδώ, χωρίς Portal ή αποθήκευση στο Smart Pro.</p>'
-        if lab_state == 'absent' and lab_create_token:
-            lab_panel += f"""<form method="post" action="lab-login-create" id="lab-login-create-form">
-<input type="hidden" name="csrf" value="{html.escape(lab_create_token,quote=True)}">
-<label>Πληκτρολόγησε <strong>{LAB_CREATE_WORD}</strong> για πραγματική δημιουργία σύνδεσης QA:</label>
+        lab_panel += '<p class="note">Νέος απομονωμένος χρήστης με διαχειριστικά δικαιώματα, αλλά ΜΟΝΟ τοπική πρόσβαση. Ο κωδικός δημιουργείται τυχαία μόνο μετά την έγκριση και παραδίδεται κρυπτογραφημένος στο συγκεκριμένο Admin Portal request. Δεν εμφανίζεται εδώ.</p>'
+        if lab_state == 'absent' and handoff_token:
+            lab_panel += f"""<section><h2>3. Ασφαλής παράδοση πραγματικού QA administrator στο Portal</h2>
+<p>Μόνο δοκιμαστικό HA. Πρώτα προετοίμασε την παραλαβή στο Admin Portal της σωστής εγκατάστασης. Αντέγραψε τον εφάπαξ κωδικό μεταφοράς εδώ. Ο λογαριασμός δημιουργείται μόνο μετά από ρητή έγκριση.</p>
+<form method="post" action="lab-handoff-create" id="lab-handoff-create-form">
+<input type="hidden" name="csrf" value="{html.escape(handoff_token,quote=True)}">
+<label>Εφάπαξ κωδικός μεταφοράς Portal<input name="ticket" autocomplete="off" maxlength="96" required></label>
+<label>Πληκτρολόγησε <strong>{HANDOFF_WORD}</strong> για πραγματική δημιουργία και κρυπτογραφημένη αποστολή:</label>
 <input name="confirm" autocomplete="off" maxlength="24" required>
-<button class="create-button" type="submit">Δημιουργία QA λογαριασμού με login</button>
-</form>"""
+<button class="create-button" type="submit">Δημιουργία QA admin &amp; ασφαλής παράδοση</button>
+</form><output id="handoff-create-result" role="status" aria-live="polite"></output></section>"""
         if lab_state in ('login_ready','incomplete_no_login') and lab_revoke_token:
             lab_panel += f"""<form method="post" action="lab-login-revoke" id="lab-login-revoke-form">
 <input type="hidden" name="csrf" value="{html.escape(lab_revoke_token,quote=True)}">
@@ -257,15 +261,10 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
 <input name="confirm" autocomplete="off" maxlength="24" required>
 <button class="revoke-button" type="submit">Ανάκληση μόνο του QA LOGIN LAB</button>
 </form>"""
-        lab_panel += """<output id="lab-login-result" role="status" aria-live="polite"></output>
-<div id="qa-one-time-secret" hidden><p><strong>ΕΜΦΑΝΙΣΗ ΜΙΑΣ ΧΡΗΣΗΣ — ΜΗΝ ΣΤΕΙΛΕΙΣ SCREENSHOT / PASSWORD.</strong></p>
-<label>Username <input id="qa-once-user" readonly autocomplete="off"></label>
-<label>Password <input id="qa-once-password" type="password" readonly autocomplete="off"></label>
-<button id="qa-secret-show" type="button">Εμφάνιση/απόκρυψη κωδικού</button>
-<p>Αντέγραψε τα στοιχεία αποκλειστικά σε ανώνυμη σύνδεση στο ΤΟΠΙΚΟ Home Assistant. Μη μεταφέρεις τον κωδικό στο ChatGPT ή στο Portal. Μετά δοκίμασε ανάκληση.</p></div></section>"""
+        lab_panel += '<output id="lab-login-result" role="status" aria-live="polite"></output></section>'
     return f"""<!doctype html><html lang="el"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
-<title>Smart Pro Access — QA 0.5.0</title>
+<title>Smart Pro Access — QA 0.6.0</title>
 <style>
 :root{{color-scheme:light dark}}*{{box-sizing:border-box}}
 body{{margin:0;background:#101722;color:#e9eef7;font:16px/1.55 system-ui,-apple-system,sans-serif}}
@@ -285,8 +284,7 @@ output{{display:block;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere
 <main><div class="k">SMART PRO SYSTEM · ΑΠΟΚΛΕΙΣΤΙΚΑ ΔΟΚΙΜΑΣΤΙΚΟ</div>
 <h1>{html.escape(title)}</h1><span class="status {'ok' if ok else 'blocked'}">{'ΕΠΙΤΥΧΙΑ' if ok else 'ΔΕΝ ΕΓΚΡΙΝΕΤΑΙ'}</span>
 <p>{html.escape(description)}</p><p class="note">Έκδοση QA {APP_VERSION}. Μόνο στην ελεγχόμενη εγκατάσταση.
-Το άνοιγμα της σελίδας δεν δημιουργεί λογαριασμό. Δεν συνδέεται με Portal ή Managed Support.
-Κωδικός δημιουργείται ΜΟΝΟ με ξεχωριστή ρητή έγκριση στη δοκιμαστική ενότητα login.</p>
+Το άνοιγμα της σελίδας δεν δημιουργεί λογαριασμό. Αποκλειστικά η δοκιμαστική, ρητά εγκεκριμένη παράδοση συνδέεται με το Portal. Καμία αλλαγή στο Managed Support.</p>
 {panel}{lab_panel}{result_html}</main></body></html>""".encode('utf-8')
 
 
@@ -330,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
         state = 'unknown'
         create_token = revoke_token = ''
         lab_state = 'unknown'
-        lab_create_token = lab_revoke_token = ''
+        lab_create_token = lab_revoke_token = handoff_token = ''
         if outcome['is_admin']:
             state = inspect_retained(supervisor_token=os.environ.get('SUPERVISOR_TOKEN',''))
             lab_state = inspect_lab(supervisor_token=os.environ.get('SUPERVISOR_TOKEN',''))
@@ -339,19 +337,22 @@ class Handler(BaseHTTPRequestHandler):
             # No legacy browser consent token is issued by the 0.5.0 UI.
             # The 0.5.0 test is solely the distinct LOGIN LAB account.
             if identity and lab_state == 'absent' and not attempted('lab_create'):
-                lab_create_token = issue(identity,action='lab_create')
+                handoff_token = issue(identity,action='handoff_create')
             elif identity and lab_state in ('login_ready','incomplete_no_login') and not attempted('lab_revoke'):
                 lab_revoke_token = issue(identity,action='lab_revoke')
         self._write(status, render_page(outcome, retained_state=state,
                     create_token=create_token, revoke_token=revoke_token,
-                    lab_state=lab_state,lab_create_token=lab_create_token,lab_revoke_token=lab_revoke_token),
+                    lab_state=lab_state,lab_create_token=lab_create_token,lab_revoke_token=lab_revoke_token, handoff_token=handoff_token),
                     'text/html; charset=utf-8')
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if path not in ('/origin-check', '/retain-admin', '/revoke-admin',
-                        '/lab-login-create', '/lab-login-revoke'):
+                        '/lab-login-create', '/lab-login-revoke', '/lab-handoff-create'):
             self._write(HTTPStatus.METHOD_NOT_ALLOWED, b'Unsupported action', 'text/plain')
+            return
+        if path == '/lab-login-create':
+            self._write(HTTPStatus.METHOD_NOT_ALLOWED,b'Use protected handoff only','text/plain')
             return
         outcome = verify_live_core_admin(self.client_address[0], self.headers)
         if outcome['is_admin'] is not True:
@@ -391,15 +392,16 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 512:
                 raise ValueError()
             payload = json.loads(self.rfile.read(length).decode('utf-8','strict'))
-            if not isinstance(payload,dict) or set(payload) != {'csrf','confirm'}:
+            expected = {'csrf','confirm','ticket'} if path == '/lab-handoff-create' else {'csrf','confirm'}
+            if not isinstance(payload,dict) or set(payload) != expected:
                 raise ValueError()
-            if not isinstance(payload['csrf'],str) or not isinstance(payload['confirm'],str):
+            if not isinstance(payload['csrf'],str) or not isinstance(payload['confirm'],str) or (path == '/lab-handoff-create' and (not isinstance(payload['ticket'],str) or len(payload['ticket'])>96)):
                 raise ValueError()
         except (ValueError,UnicodeDecodeError,json.JSONDecodeError):
             self._write(HTTPStatus.BAD_REQUEST,b'invalid_payload_no_write','text/plain')
             return
         action = {'/retain-admin':'create','/revoke-admin':'revoke',
-                  '/lab-login-create':'lab_create','/lab-login-revoke':'lab_revoke'}[path]
+                  '/lab-login-create':'lab_create','/lab-login-revoke':'lab_revoke', '/lab-handoff-create':'handoff_create'}[path]
         identity = _single_header(self.headers,'X-Remote-User-Id')
         if not identity or not consume(payload['csrf'],identity,payload['confirm'],action=action):
             self._write(HTTPStatus.FORBIDDEN,b'approval_invalid_no_write','text/plain')
@@ -414,7 +416,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 token=os.environ.get('SUPERVISOR_TOKEN','')
                 response = None
-                if action == 'lab_create':
+                if action == 'handoff_create':
+                    code = deliver_laboratory_account(payload['ticket'], supervisor_token=token)
+                elif action == 'lab_create':
                     response = create_lab(supervisor_token=token)
                     code = response['code']
                 elif action == 'lab_revoke':
@@ -422,6 +426,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     code = (create_retained(supervisor_token=token) if action == 'create'
                             else revoke_retained(supervisor_token=token))
+            except HandoffError as e:
+                code = str(e) if str(e).startswith(('handoff_', 'qa_login_')) else 'handoff_unknown_check_both_sides'
             except LabCredentialError as e:
                 lab_codes = {
                     'qa_login_existing_account_or_username_stop',

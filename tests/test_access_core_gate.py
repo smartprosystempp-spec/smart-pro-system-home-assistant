@@ -119,9 +119,9 @@ class RoleReadbackTests(unittest.TestCase):
                 self.assertNotIn(forbidden, data)
 
     def test_version_tag_consistent(self):
-        self.assertEqual(app.APP_VERSION,"0.5.0")
-        self.assertIn('version: "0.5.0"',(ADDON/'config.yaml').read_text())
-        self.assertIn('BUILD_VERSION=0.5.0',(ADDON/'Dockerfile').read_text())
+        self.assertEqual(app.APP_VERSION,"0.6.0")
+        self.assertIn('version: "0.6.0"',(ADDON/'config.yaml').read_text())
+        self.assertIn('BUILD_VERSION=0.6.0',(ADDON/'Dockerfile').read_text())
 
 if __name__ == "__main__":
     unittest.main()

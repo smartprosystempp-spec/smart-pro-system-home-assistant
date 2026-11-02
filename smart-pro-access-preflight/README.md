@@ -1,44 +1,18 @@
-# Smart Pro Access Preflight — QA 0.5.0
+# Smart Pro Access Preflight — QA 0.6.0
 
-**ΑΠΟΚΛΕΙΣΤΙΚΑ ΣΤΟ ΦΡΕΣΚΟ TEST HOME ASSISTANT. ΠΟΤΕ ΣΕ ΠΑΡΑΓΩΓΗ.**
+**TEST HA ONLY — never customer production.** No new VPS, persistent Vault or background account creation.
 
-## Τι έχουμε ήδη επαληθεύσει
+## Manual one-time secure handoff (15 minutes)
+1. Admin Portal > correct installation > secure receiver > Prepare. Only the WordPress administrator sees the one-time ticket.
+2. On the matching QA Home Assistant open Smart Pro Access QA 0.6.0 **as verified HA administrator**.
+3. Paste the full `ID-xxxxx:64hex` ticket and explicitly type `ΠΑΡΑΔΟΣΗ`. Submit **once**.
+4. QA app verifies via HA Supervisor Ingress + fresh HA Core list and checks the Portal ticket and key *before* it creates a local-only QA administrator.
+5. QA app creates `Smart Pro QA LOGIN LAB / smartpro_qa_login_lab` with real random password and seals it directly for Portal's X25519 public key using PyNaCl SealedBox. Plain password is NEVER written to disk, passed via browser or ordinary heartbeat, stored in QA logs or sent to ChatGPT.
+6. After a successful handoff, Portal shows `ENCRYPTED_RECEIVED`. WP admin POST `Εμφάνιση κωδικού` decrypts into a no-store page; user copies it into their own secure password manager, then acknowledges & clears.
+7. Test local login and, after completing QA, revoke the account via the distinct `ΔΙΑΓΡΑΦΗ` action.
 
-- 0.2.0: ο πραγματικός Home Assistant administrator επιβεβαιώθηκε από Ingress και Core. Ο απλός `Smart Pro QA User` απορρίφθηκε.
-- 0.3.3: ένας εφάπαξ QA διαχειριστής δημιουργήθηκε και διαγράφηκε μέσω Core, με χειροκίνητη επιβεβαίωση ότι δεν παρέμεινε.
-- 0.4.0: ο `Smart Pro QA RETAINED NO LOGIN` δημιουργήθηκε, παρέμεινε μετά από επανεκκίνηση του QA add-on και ανακλήθηκε. **Δεν υπάρχει πλέον**.
+On failed/ambiguous delivery **DO NOT REPEAT CREATE**. Inspect Admin Portal and Home Assistant users. Since the account may already exist, recover through the existing explicit revoke.
 
-## Νέα λειτουργία 0.5.0 — πραγματικό, τοπικό login
+Security constraints: no generic remote privileged HA command, no HA password through regular Tool heartbeat, Portal owner manually arms scoped 15-minute ticket, no cross-add-on credential/file access. The one-time ticket is a sensitive bearer capability: never share, screenshot or log it.
 
-Η νέα έκδοση δοκιμάζει έναν **άλλο**, αποκλειστικό λογαριασμό:
-
-- Όνομα Home Assistant: `Smart Pro QA LOGIN LAB`
-- Username: `smartpro_qa_login_lab`
-- Ρόλος: διαχειριστής, **όχι Owner**
-- Πρόσβαση: **μόνο από το τοπικό δίκτυο** (`local_only: true`)
-- Password: ισχυρό, τυχαίο από `secrets.token_urlsafe(36)`, δημιουργείται στο απομονωμένο πρόσθετο και παραδίδεται **μία μόνο φορά** στη σελίδα του επαληθευμένου διαχειριστή, μετά την έγκριση. Το Smart Pro QA δεν αποθηκεύει plaintext password σε αρχείο, Portal, database, audit ή logs. Το Home Assistant διαχειρίζεται το δικό του credential/password hash.
-
-Το νέο εργαλείο **ΔΕΝ** δημιουργεί κανονική, μόνιμη Smart Pro παραγωγική πρόσβαση, δεν έχει vault, δεν αποστέλλει στοιχεία στη Smart Pro, δεν συνδέεται με Portal ή Managed Support και δεν ενεργοποιεί τεχνική σύνδεση από απόσταση. Είναι αποκλειστικά η τεχνική επιβεβαίωση ότι μπορούν να αποδοθούν και να ανακληθούν πραγματικά credentials με admin consent.
-
-### Ζωντανό QA — μην παραλείψεις τα checkpoints
-
-1. Ενημέρωσε **μόνο** το QA add-on από 0.4.0 σε 0.5.0. Άφησε Start on boot, Watchdog, Auto update OFF. Καμία αλλαγή στα άλλα Smart Pro add-ons.
-2. Άνοιξε ως administrator. Αναμενόμενο: **Δεν υπάρχει ο ειδικός δοκιμαστικός λογαριασμός με login**. Έλεγξε στο **Ρυθμίσεις → Άτομα → Χρήστες** ότι απουσιάζει `Smart Pro QA LOGIN LAB`. Στείλε screenshot **μόνο της αρχικής οθόνης χωρίς μυστικά**. Μην πατήσεις δημιουργία ακόμη.
-3. Με ξεχωριστή έγκριση, πληκτρολόγησε `ΣΥΝΔΕΣΗ` στην ενότητα «Ασφαλής δοκιμή πραγματικού login», μία φορά. Μόνο τότε δημιουργείται πραγματικός admin user, συνδέονται credentials και γίνεται νέα Core ανάγνωση. Αναμενόμενο `qa_login_admin_created_credentials_linked`.
-4. **ΜΗ ΣΤΕΙΛΕΙΣ SCREENSHOT ΜΕ PASSWORD.** Αντέγραψε username και τον κωδικό που εμφανίζεται μία φορά στο browser. Αν χαθεί ο κωδικός, **μην επαναλάβεις τη δημιουργία**: ανακάλεσε τον QA λογαριασμό και ξαναδοκιμάζουμε μετά από ελεγχόμενη εκκίνηση.
-5. Από το **ίδιο τοπικό δίκτυο**, σε νέο ανώνυμο παράθυρο, σύνδεση με τα στοιχεία QA. Επιβεβαίωσε ότι συνδέεται ως διαχειριστής. **Μην κάνεις αλλαγές σε συσκευές, αυτοματισμούς ή άλλους χρήστες.** Στείλε μόνο το λεκτικό αποτέλεσμα, όχι τον κωδικό, όχι cookie, όχι ingress URL.
-6. Στην αρχική συνεδρία Home Assistant administrator, κάνε ανανέωση και βεβαιώσου ότι η κατάσταση είναι `login_ready`. Έπειτα, με ξεχωριστή έγκριση `ΔΙΑΓΡΑΦΗ`, εκτέλεσε μία ελεγχόμενη ανάκληση. Αναμενόμενο `qa_login_admin_revoked_verified`.
-7. Έλεγξε ότι ο `Smart Pro QA LOGIN LAB` αφαιρέθηκε, οι υπόλοιποι λογαριασμοί παραμένουν, και νέα προσπάθεια login με τα παλιά στοιχεία QA αποτυγχάνει. Μην κοινοποιήσεις αυτά τα στοιχεία.
-
-**Σε οποιαδήποτε αποτυχία ή διακοπή μετά την υποβολή:** μη δημιουργήσεις δεύτερο λογαριασμό, μην επανεκκινήσεις και μην θεωρήσεις ότι η πράξη απέτυχε. Έλεγξε την καρτέλα Χρήστες. Η ξεχωριστή ανάκληση επιτρέπεται για ακριβή, μη τροποποιημένο QA account είτε έχει κανονικό login είτε έμεινε χωρίς login λόγω αβεβαιότητας. Αν βρεθεί άγνωστη/τροποποιημένη κατάσταση, μόνο χειροκίνητος έλεγχος.
-
-## Ασφαλής μηχανισμός
-
-- Η οθόνη επιβεβαιώνει **δύο φορές** HA admin: Supervisor Ingress identity + fresh protected `config/auth/list` readback.
-- Exact Supervisor ingress socket peer, strict `Origin`/`Host`, browser JSON POST + custom action header, **συγκεκριμένος και μοναδικός** CSRF consent token ανά identity/action με λήξη 180s.
-- Κοινό lock και μόνο μία προσπάθεια ανά startup για κάθε CREATE/REVOKE action. Exact predefined name, username, group and local-only scope. Δεν επιτρέπονται input user IDs, target names or arbitrary commands.
-- Το Core user δημιουργείται με `config/auth/create` και τα credentials με `config/auth_provider/homeassistant/create`. Μετά γίνεται έλεγχος ταυτότητας, username, provider και group. Δεν ζητείται ο κωδικός προσωπικού χρήστη.
-- Η ανάκληση με `config/auth/delete` διαγράφει τον χρήστη, τα συνδεδεμένα credentials και τα Core refresh tokens, όπως ορίζει ο Home Assistant auth manager. Ελέγχεται ξανά ότι ο λογαριασμός και το username απουσιάζουν.
-- Ξεχωριστό QA component και Docker image, χωρίς απευθείας πρόσβαση Host ή αλλαγή στα Smart Pro System / Managed Support / Tunnel / Portal.
-
-**ΣΗΜΑΝΤΙΚΟ ΟΡΙΟ:** Για πραγματικούς συνδρομητές χρειάζονται ακόμη σχέδιο φύλαξης μυστικών, απομακρυσμένης τεχνικής σύνδεσης, rotation, audit και ασφαλής σύνδεση με Portal. Η 0.5.0 δεν τα υλοποιεί.
+The previous 0.5.0 free-standing password-reveal/create button is intentionally disabled for 0.6.0. Live release only after WordPress/PHP sodium and exact HA image QA.

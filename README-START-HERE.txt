@@ -1,48 +1,23 @@
-SMART PRO SYSTEM — Home Assistant Credential Handoff Stage 2
-SOURCE OVERLAY FOR GITHUB MAIN — NOT A HOME ASSISTANT INSTALL ZIP
+SMART PRO ACCESS PREFLIGHT — QA 0.6.0
+REPOSITORY OVERLAY — not a Home Assistant add-on installable ZIP.
 
-VERSION: Smart Pro System 3.0.29
-BASE: GitHub main / Smart Pro System 3.0.28
+The repository contains Smart Pro Access Preflight 0.5.0 already.
+Upload/replace only the enclosed smart-pro-access-preflight files
+plus tests/test_access_handoff_qa.py and adapted legacy tests in tests/.
+NO smart-pro-system, Managed Support or Tunnel files changed.
+QA-only add-on builds locally from its own Dockerfile, no Action required.
 
-This ZIP changes/creates exactly:
-  smart-pro-system/run.sh
-  smart-pro-system/Dockerfile
-  smart-pro-system/config.yaml
-  smart-pro-system/ha_credential_handoff_qa_agent.py (new)
-  .github/workflows/publish-smart-pro-system.yml
-  README-START-HERE.txt (documentation only, optional repo upload)
+INSTALL ORDER
+1. FIRST live verify Portal 3.6.397: admin card should show NOT_RECEIVED on ID-75236.
+2. ONLY AFTER Portal PASS, upload this QA overlay to GitHub main and update
+   Smart Pro Access Preflight 0.5.0 -> 0.6.0 on TEST HA ID-75236.
+3. STOP after visual QA. Do not arm Portal or approve account creation yet.
 
-No changes to smart-pro-system/app.py, index.html, script.js, or existing Managed
-Support, Tunnel, QA Access Preflight add-on, Portal pairing, subscriptions or
-heartbeat code. The existing image is still published via GitHub Actions.
-
-SAFETY: Opt-in `ha_credential_handoff_qa_enabled` is FALSE by default.
-The worker only polls an explicitly queued Portal test with its EXISTING
-Installation Token and sends fixed, fake username/password constants.
-NO real Home Assistant user is created. NO real credentials are created, saved,
-retrieved or delivered. NO password is obtained from Home Assistant.
-
-INSTALLATION SEQUENCE, STOP AT FIRST CHECKPOINT:
-1. Install Portal 3.6.395 first, check it displays Agent Synthetic subcard.
-2. Upload this overlay to GitHub main, retaining all existing repository files;
-   do not delete or replace whole folders. Commit.
-3. GitHub Actions > Publish Smart Pro System image > Run workflow (main).
-   Verify amd64+aarch64 build and manifest success.
-4. In the TEST Home Assistant only, update Smart Pro System to 3.0.29. Do NOT
-   uninstall the add-on and do NOT re-pair. Keep Managed Support unchanged.
-5. Its Configuration option `ha_credential_handoff_qa_enabled`: switch to TRUE
-   and save; restart ONLY Smart Pro System add-on if required.
-6. Admin Portal > Installations > the same paired installation > Full Folder >
-   Overview > Credential Handoff QA > 'Δοκιμή πραγματικής επικοινωνίας'
-   > 'Έναρξη δοκιμαστικής αποστολής από Home Assistant' ONCE.
-7. Refresh after ~20 seconds, expected AGENT_SYNTHETIC_RECEIVED with fixed FAKE
-   username and password, and correct Installation ID.
-8. Wait for separate guidance before acknowledge/cleanup.
-
-STOP immediately if any UI displays REAL delivery enabled or any real secret.
-Do not send passwords, tokens or entire local logs to ChatGPT.
-
-This is SYNTHETIC transport testing only. Real credential handoff needs a
-separate hardening milestone: end-to-end encryption, controlled one-time
-reveal, local HA admin consent, durable anti-replay, correct identity and
-lifecycle, fail-closed expiry and deletion with backup/key review.
+LATER LIVE TEST (not now)
+- Admin Portal arm 15-minute ticket; never share it in screenshot/chat.
+- In matching QA HA Access Preflight 0.6.0, verify HA admin and locally paired ID.
+- Paste ticket, type ΠΑΡΑΔΟΣΗ, submit exactly once.
+- Portal ENCRYPTED_RECEIVED; explicit no-store admin reveal and acknowledge.
+- Copy password into your password manager; no plaintext in HA UI.
+- Test local login, then explicit QA account revoke when testing complete.
+On any uncertain/failed action, no retries before reviewing Portal/HA users.

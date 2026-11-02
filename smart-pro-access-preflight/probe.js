@@ -24,52 +24,55 @@
       probeTarget.textContent = 'browser_fetch_failed_no_write (χωρίς αλλαγές χρήστη)';
     } finally { button.disabled = false; }
   });
-  // Credential lab: the secret exists only in the immediate fetch reply and
-  // current admin iframe. NEVER log, persist, postMessage or send to Portal.
-  for (const [id, action] of [
-    ['lab-login-create-form', 'create'], ['lab-login-revoke-form', 'revoke']
-  ]) {
-    const form = document.getElementById(id);
-    const result = document.getElementById('lab-login-result');
-    if (!form || !result) continue;
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const button = form.querySelector('button[type="submit"]');
-      button.disabled = true;
-      result.textContent = 'Εκτέλεση εφάπαξ QA ενέργειας — μην επαναλάβεις.';
-      try {
-        const csrf = form.querySelector('input[name="csrf"]').value;
-        const confirm = form.querySelector('input[name="confirm"]').value;
-        const response = await fetch(form.action, {
-          method: 'POST', mode: 'same-origin', credentials: 'same-origin',
-          cache: 'no-store', redirect: 'error',
-          headers: {'Content-Type':'application/json', 'X-Smart-Pro-QA-Action':'v1'},
-          body: JSON.stringify({csrf, confirm})
-        });
-        if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json'))
-          throw Error('lab_action_uncertain');
-        const data = await response.json();
-        if (typeof data.code !== 'string' || !/^[a-z0-9_]{3,100}$/.test(data.code))
-          throw Error('invalid_qa_result');
-        result.textContent = 'Αποτέλεσμα: ' + data.code + '\nΈλεγξε την καρτέλα Χρήστες. Μην επαναλάβεις.';
-        if (action === 'create' && data.code === 'qa_login_admin_created_credentials_linked') {
-          if (data.username !== 'smartpro_qa_login_lab' ||
-              typeof data.password !== 'string' || data.password.length < 40) throw Error('invalid_secret_reply');
-          const area = document.getElementById('qa-one-time-secret');
-          document.getElementById('qa-once-user').value = data.username;
-          document.getElementById('qa-once-password').value = data.password;
-          area.hidden = false;
-          document.getElementById('qa-secret-show').addEventListener('click', () => {
-            const input = document.getElementById('qa-once-password');
-            input.type = input.type === 'password' ? 'text' : 'password';
-          });
-          result.textContent += '\nΤα στοιχεία εμφανίζονται παρακάτω ΜΙΑ ΦΟΡΑ. ΜΗ ΣΤΕΙΛΕΙΣ SCREENSHOT.';
-        }
-      } catch (_error) {
-        result.textContent = 'result_unknown_check_HA_users_no_retry — Έλεγξε τη λίστα Χρηστών. Μην επαναλάβεις.';
-      }
-    });
-  }
+  // Real credentials NEVER enter browser JS. Only a one-time Portal ticket is posted.
+  const handoffForm = document.getElementById('lab-handoff-create-form');
+  const handoffResult = document.getElementById('handoff-create-result');
+  if (handoffForm && handoffResult) handoffForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = handoffForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    handoffResult.textContent = 'Εκτέλεση μίας ελεγχόμενης ενέργειας. Μην επαναλάβεις.';
+    try {
+      const body = {
+        csrf: handoffForm.querySelector('input[name="csrf"]').value,
+        ticket: handoffForm.querySelector('input[name="ticket"]').value.trim(),
+        confirm: handoffForm.querySelector('input[name="confirm"]').value
+      };
+      const response = await fetch(handoffForm.action, {
+        method:'POST', mode:'same-origin', credentials:'same-origin',
+        cache:'no-store', redirect:'error',
+        headers:{'Content-Type':'application/json','X-Smart-Pro-QA-Action':'v1'},
+        body:JSON.stringify(body)
+      });
+      if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json'))
+        throw Error('handoff_http_uncertain');
+      const data = await response.json();
+      if (!/^[a-z0-9_]{3,110}$/.test(data.code || '')) throw Error('handoff_invalid_response');
+      handoffResult.textContent = 'Αποτέλεσμα: '+data.code+'\nΈλεγξε το Portal και τη λίστα χρηστών. Μην επαναλάβεις.';
+    } catch (_error) {
+      handoffResult.textContent = 'handoff_outcome_uncertain_check_portal_and_ha_users — Μην επαναλάβεις.';
+    } finally { handoffForm.querySelector('input[name="ticket"]').value=''; }
+  });
+  const revokeForm = document.getElementById('lab-login-revoke-form');
+  const revokeResult = document.getElementById('lab-login-result');
+  if (revokeForm && revokeResult) revokeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = revokeForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    revokeResult.textContent = 'Εκτέλεση ελεγχόμενης ανάκλησης. Μην επαναλάβεις.';
+    try {
+      const payload={csrf:revokeForm.querySelector('input[name="csrf"]').value,
+                     confirm:revokeForm.querySelector('input[name="confirm"]').value};
+      const response=await fetch(revokeForm.action,{method:'POST',mode:'same-origin',
+        credentials:'same-origin',cache:'no-store',redirect:'error',
+        headers:{'Content-Type':'application/json','X-Smart-Pro-QA-Action':'v1'},
+        body:JSON.stringify(payload)});
+      if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json')) throw Error('uncertain');
+      const data=await response.json();
+      if (!/^[a-z0-9_]{3,110}$/.test(data.code||'')) throw Error('invalid');
+      revokeResult.textContent='Αποτέλεσμα: '+data.code+'\nΈλεγξε την καρτέλα Χρήστες. Μην επαναλάβεις.';
+    } catch (_error) { revokeResult.textContent='result_unknown_check_HA_users_no_retry'; }
+  });
   for (const [id, targetId] of [
     ['retained-create-form', 'retained-create-result'],
     ['retained-revoke-form', 'retained-revoke-result'],

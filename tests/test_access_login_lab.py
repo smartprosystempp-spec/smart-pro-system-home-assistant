@@ -134,14 +134,18 @@ class CredentialLifecycle(unittest.TestCase):
         html=app.render_page({'is_admin':False,'reason':'non_admin'},lab_state='absent',lab_create_token='S').decode()
         self.assertNotIn('lab-login-create-form',html)
         self.assertNotIn(SECRET,html)
-    def test_only_absent_has_create_and_only_ready_has_revoke(self):
+    def test_only_absent_has_handoff_and_only_ready_has_revoke(self):
         ok={'is_admin':True,'reason':'ok'}
-        h=app.render_page(ok,lab_state='absent',lab_create_token='a').decode()
-        self.assertIn('lab-login-create-form',h);self.assertNotIn('lab-login-revoke-form',h)
+        h=app.render_page(ok,lab_state='absent',handoff_token='a').decode()
+        self.assertIn('lab-handoff-create-form',h)
+        self.assertNotIn('lab-login-create-form',h)
+        self.assertNotIn('lab-login-revoke-form',h)
         h=app.render_page(ok,lab_state='login_ready',lab_revoke_token='b').decode()
-        self.assertIn('lab-login-revoke-form',h);self.assertNotIn('lab-login-create-form',h)
-        h=app.render_page(ok,lab_state='review_required',lab_create_token='a',lab_revoke_token='b').decode()
-        self.assertNotIn('lab-login-revoke-form',h);self.assertNotIn('lab-login-create-form',h)
+        self.assertIn('lab-login-revoke-form',h)
+        self.assertNotIn('lab-handoff-create-form',h)
+        h=app.render_page(ok,lab_state='review_required',handoff_token='a',lab_revoke_token='b').decode()
+        self.assertNotIn('lab-login-revoke-form',h)
+        self.assertNotIn('lab-handoff-create-form',h)
     def test_consent_scopes_are_independent(self):
         with consent_qa._lock:consent_qa._issued.clear();consent_qa._attempted=set()
         create=consent_qa.issue(ADMIN,action='lab_create')
@@ -161,61 +165,70 @@ class LabHttp(unittest.TestCase):
         cls.server.shutdown();cls.server.server_close();cls.thread.join(5)
     def setUp(self):
         with consent_qa._lock:consent_qa._issued.clear();consent_qa._attempted=set()
-    def request(self,path='/lab-login-create',*,admin=True,csrf=True,origin='good',action_header='v1',scope='lab_create',confirm=None):
+    def request(self,path='/lab-handoff-create',*,csrf=True,origin='good',action_header='v1',scope='handoff_create',confirm=None,other_payload=None):
         h={'Content-Type':'application/json','X-Remote-User-Id':ADMIN,'X-Smart-Pro-QA-Action':action_header}
         if origin=='good':h['Origin']=f'http://127.0.0.1:{self.port}'
         elif origin=='bad':h['Origin']='https://wrong.example'
-        if csrf: token=consent_qa.issue(ADMIN,action=scope)
-        else: token='forged'
-        if confirm is None:confirm='ΣΥΝΔΕΣΗ' if scope=='lab_create' else 'ΔΙΑΓΡΑΦΗ'
+        token=consent_qa.issue(ADMIN,action=scope) if csrf else 'forged'
+        if confirm is None:confirm='ΠΑΡΑΔΟΣΗ' if scope=='handoff_create' else 'ΔΙΑΓΡΑΦΗ'
+        payload={'csrf':token,'confirm':confirm}
+        if scope=='handoff_create' or path=='/lab-handoff-create':
+            payload['ticket']='ID-75236:'+'a'*64
+        if other_payload:payload.update(other_payload)
         conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=5)
-        conn.request('POST',path,json.dumps({'csrf':token,'confirm':confirm}).encode(),h)
+        conn.request('POST',path,json.dumps(payload).encode(),h)
         res=conn.getresponse();data=res.read();status=res.status;conn.close()
         return status,data
     def test_external_network_headers_do_not_create(self):
-        with patch.object(app,'create_lab') as write:
+        with patch.object(app,'deliver_laboratory_account') as write:
             status,_=self.request()
             self.assertEqual(status,403);write.assert_not_called()
-    def test_admin_can_create_once_with_secret_response(self):
-        result={'code':'qa_login_admin_created_credentials_linked','username':lab.LAB_USERNAME,'password':SECRET}
+    def test_admin_handoff_one_time_code_only(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
-             patch.object(app,'create_lab',return_value=result) as write:
+             patch.object(app,'deliver_laboratory_account',return_value='handoff_real_qa_admin_created_and_encrypted_received') as write:
             status,data=self.request();self.assertEqual(status,200)
-            self.assertEqual(json.loads(data),result)
+            self.assertEqual(json.loads(data),{'code':'handoff_real_qa_admin_created_and_encrypted_received'})
+            self.assertNotIn(b'password',data)
             self.assertEqual(write.call_count,1)
             status,_=self.request();self.assertEqual(status,409);self.assertEqual(write.call_count,1)
-    def test_no_create_for_nonnadmin(self):
+    def test_no_create_for_nonadmin(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':False,'reason':'non_admin'}),\
-             patch.object(app,'create_lab') as write:
+             patch.object(app,'deliver_laboratory_account') as write:
             status,_=self.request();self.assertEqual(status,403);write.assert_not_called()
     def test_cross_site_denied(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
-             patch.object(app,'create_lab') as write:
+             patch.object(app,'deliver_laboratory_account') as write:
             self.assertEqual(self.request(origin='bad')[0],403)
             self.assertEqual(self.request(action_header='')[0],403)
             write.assert_not_called()
     def test_invalid_csrf_or_word_denied(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
-             patch.object(app,'create_lab') as write:
+             patch.object(app,'deliver_laboratory_account') as write:
             self.assertEqual(self.request(csrf=False)[0],403)
             self.assertEqual(self.request(confirm='wrong')[0],403)
             write.assert_not_called()
-    def test_lab_create_token_not_valid_for_revoke(self):
+    def test_handoff_token_not_valid_for_revoke(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
              patch.object(app,'revoke_lab') as write:
-            self.assertEqual(self.request('/lab-login-revoke',scope='lab_create')[0],403)
+            self.assertEqual(self.request('/lab-login-revoke',scope='handoff_create')[0],400)
             write.assert_not_called()
     def test_lab_revoke_with_own_approval(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
              patch.object(app,'revoke_lab',return_value='qa_login_admin_revoked_verified') as revoke:
             status,data=self.request('/lab-login-revoke',scope='lab_revoke')
-            self.assertEqual(status,200);self.assertEqual(json.loads(data)['code'],'qa_login_admin_revoked_verified')
+            self.assertEqual(status,200)
+            self.assertEqual(json.loads(data)['code'],'qa_login_admin_revoked_verified')
             revoke.assert_called_once()
-    def test_error_does_not_expose_password(self):
+    def test_legacy_free_standing_create_disallowed(self):
+        with patch.object(app,'deliver_laboratory_account') as write:
+            self.assertEqual(self.request('/lab-login-create')[0],405)
+            write.assert_not_called()
+    def test_error_does_not_expose_password_or_ticket(self):
         with patch.object(app,'verify_live_core_admin',return_value={'is_admin':True,'reason':'ok'}),\
-             patch.object(app,'create_lab',side_effect=lab.LabCredentialError('qa_login_write_uncertain_inspect_users')):
+             patch.object(app,'deliver_laboratory_account',side_effect=app.HandoffError('handoff_delivery_uncertain_check_both_sides')):
             status,data=self.request();self.assertEqual(status,200)
             self.assertNotIn(b'password',data)
-            self.assertEqual(json.loads(data)['code'],'qa_login_write_uncertain_inspect_users')
+            self.assertNotIn(b'ID-75236',data)
+            self.assertEqual(json.loads(data)['code'],'handoff_delivery_uncertain_check_both_sides')
 
 if __name__=='__main__':unittest.main()
