@@ -35,3 +35,14 @@ E. Release compatible versions together on QA5 and run **one** approved end-to-e
 - Pass requires Portal approval → device handoff → single Broker claim → one persisted Managed identity → stable online MeshAgent → Portal health, all without copying credentials.
 - Until actual Broker source is reviewed, **no write code, image build, plugin update, pairing or QA5 startup** is authorized by this document.
 - Not in scope: Home Assistant admin user creation, subscription modifications, backup, External URL, Tunnel, MeshCentral technician grants or wider access.
+
+## Source review — exact Broker 0.60.32 (2026-11-02)
+User supplied complete WordPress plugin ZIP `smart-pro-remote-session-broker-0.60.32-diagnostic-renewal-noise-gate(1).zip` (SHA-256 `b0dd5fea23957d349af493b6e610be2947840f926d7c7e5df26aa0c33be35690`).
+- Broker already implements `SPRSB_Managed::issue_pairing()` (15-minute single-use `SPM-` code) and `SPRSB_Managed::consume_pairing()`, which returns a private `SPMN-` node identifier and `SPMS-` secret to the client. Do **not** duplicate these identity foundations.
+- Current issuance is exposed through an Admin-only action; the Managed client's legacy pairing form remains locked. To achieve *zero-copy*, add a new explicitly authorized, exact-installation device handoff while keeping the legacy UI disabled.
+- Portal 3.6.399 already authenticates Tools `/heartbeat` with the installation token; its response has a control-plane section. **No existing Managed first-enrollment activation intent was found**. Device delivery requires a separate signed, one-time binding; the existing installation token alone is not authorization to create a Managed account.
+- No automatic retry after an unknown Broker-commit/client-response outcome. Existing `consume_pairing` has a one-time consumption race guard but does not implement durable client response recovery. A safe reconciliation or idempotency contract must be designed before live activation.
+- An internal-only Broker 0.60.33 **readiness foundation** has been prepared offline (no REST route/POST handler). Its admission evaluator gates canonical installation binding, Portal pairing, fresh Tools heartbeat, active paid Managed entitlement, zero previous Managed nodes (including revoked), and zero pending manual pairings; database read failure is fail-closed. 16 isolated checks plus all PHP syntax checks PASS. This staging ZIP must **not** be installed until a full coordinated release exists.
+
+### Coordinated release gate
+Do not ship an isolated Broker or Managed Support build for this feature. The planned first live QA on ID-28422 requires the compatible Broker, Portal, Smart Pro System and Managed Support components, approved explicit consent, and a single audit-backed enrollment claim. Existing 3.19.3 stays stopped.
