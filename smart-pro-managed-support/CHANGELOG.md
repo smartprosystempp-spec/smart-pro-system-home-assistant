@@ -4,6 +4,7 @@
 - Keeps the initial pairing form disabled independently of VERSION, including when no Managed identity exists.
 - Aligns app version, run script, Docker build default, Home Assistant config, image publish tags and server signature to 3.19.3.
 - Preserves MeshAgent binary, persistent identity, Broker protocol, runtime lease/termination handling, local policy, Router Compatibility, and all Home Assistant and Portal integrations.
+- Intercepts Supervisor SIGTERM/SIGINT and coordinates a clean HTTP stop, blocking new Managed starts and requesting bounded continuous-worker cleanup without clearing persisted identity or unattended consent.
 - No pairing, reseed, uninstall, data reset, Broker or Portal write, or published image is part of this source-only change. Review and offline regression tests are required before a controlled image build.
 
 ## 3.19.1 — Active Terminal Relay Termination Pilot
