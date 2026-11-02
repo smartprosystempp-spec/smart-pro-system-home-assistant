@@ -2,6 +2,8 @@
 import importlib.util
 import io
 import pathlib
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -56,6 +58,38 @@ class StableGateTests(unittest.TestCase):
             start.assert_called_once()
             stop.assert_not_called()
             self.assertEqual(save.call_count, 2)
+
+    def test_sigterm_exits_cleanly_with_no_managed_identity(self):
+        # Real SIGTERM, isolated process and localhost-only HTTP socket.
+        script = """
+import importlib.util, os, signal, sys, threading
+from http.server import ThreadingHTTPServer
+spec = importlib.util.spec_from_file_location('managed_signal_test', sys.argv[1])
+app = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(app)
+server = ThreadingHTTPServer(('127.0.0.1', 0), app.Handler)
+timer = threading.Timer(0.25, lambda: os.kill(os.getpid(), signal.SIGTERM))
+timer.start()
+app._serve_until_shutdown(server)
+"""
+        result = subprocess.run([sys.executable, "-u", "-c", script, str(SOURCE)],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, timeout=8)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("server closed after requested process shutdown", result.stdout)
+
+    def test_shutdown_prevents_new_managed_runtime(self):
+        with mock.patch.object(app, "PROCESS_SHUTDOWN", new=mock.Mock(is_set=lambda: True)):
+            with self.assertRaisesRegex(RuntimeError, "managed_shutdown_in_progress"):
+                app.start_persistent_runtime()
+
+    def test_stable_gate_does_not_depend_on_version_number(self):
+        with mock.patch.object(app, "VERSION", "99.99.99"), \
+             mock.patch.object(app, "read_policy", return_value={}), \
+             mock.patch.object(app, "render_page", return_value="safe"):
+            self.assertEqual(invoke("pair"), [409])
+            self.assertEqual(invoke("candidate-promotion"), [409])
+
 
     def test_pairing_ui_is_always_locked_in_stable_source(self):
         source = SOURCE.read_text(encoding="utf-8")
