@@ -1,23 +1,43 @@
-SMART PRO ACCESS PREFLIGHT — QA 0.6.0
-REPOSITORY OVERLAY — not a Home Assistant add-on installable ZIP.
+SMART PRO ACCESS PREFLIGHT QA 0.6.1 — READ-ONLY HANDOFF DIAGNOSTIC
 
-The repository contains Smart Pro Access Preflight 0.5.0 already.
-Upload/replace only the enclosed smart-pro-access-preflight files
-plus tests/test_access_handoff_qa.py and adapted legacy tests in tests/.
-NO smart-pro-system, Managed Support or Tunnel files changed.
-QA-only add-on builds locally from its own Dockerfile, no Action required.
+WHY THIS RELEASE
+The first 0.6.0 live handoff returned a generic uncertain browser message.
+The user confirmed NO QA LOGIN LAB account exists in HA; Admin Portal 3.6.397
+remains WAITING_FOR_HA_APPROVAL. Root cause not yet proven.
 
-INSTALL ORDER
-1. FIRST live verify Portal 3.6.397: admin card should show NOT_RECEIVED on ID-75236.
-2. ONLY AFTER Portal PASS, upload this QA overlay to GitHub main and update
-   Smart Pro Access Preflight 0.5.0 -> 0.6.0 on TEST HA ID-75236.
-3. STOP after visual QA. Do not arm Portal or approve account creation yet.
+CHANGED SOURCE (GITHUB MAIN OVERLAY)
+- smart-pro-access-preflight/app.py
+- smart-pro-access-preflight/consent_qa.py
+- smart-pro-access-preflight/probe.js
+- smart-pro-access-preflight/config.yaml
+- smart-pro-access-preflight/Dockerfile
+- smart-pro-access-preflight/README.md
+- tests/test_access_core_gate.py (0.6.1 expected version)
+- tests/test_access_preflight.py (0.6.1 expected version)
+- tests/test_access_handoff_preflight_061.py (new)
 
-LATER LIVE TEST (not now)
-- Admin Portal arm 15-minute ticket; never share it in screenshot/chat.
-- In matching QA HA Access Preflight 0.6.0, verify HA admin and locally paired ID.
-- Paste ticket, type ΠΑΡΑΔΟΣΗ, submit exactly once.
-- Portal ENCRYPTED_RECEIVED; explicit no-store admin reveal and acknowledge.
-- Copy password into your password manager; no plaintext in HA UI.
-- Test local login, then explicit QA account revoke when testing complete.
-On any uncertain/failed action, no retries before reviewing Portal/HA users.
+Copy only the smart-pro-access-preflight and tests folders into the existing
+smartprosystempp-spec/smart-pro-system-home-assistant GitHub main branch,
+merging changes. DO NOT delete/recreate other folders.
+No Smart Pro System image publish workflow is required for this QA add-on.
+
+WHAT THE RELEASE ADDS
+- A separate read-only ticket preflight button requiring a verified HA admin,
+  a unique CSRF token, same-origin headers and a valid 15-minute Portal ticket.
+- It returns only a bounded non-secret result code, never a ticket or key.
+- No account create/delete, retry, secret delivery or production activation.
+- 0.6.0 account creation remains independently confirmed and one-attempt only.
+
+LIVE CHECKPOINT 1 (ONLY)
+1. Update the Access Preflight QA app 0.6.0 -> 0.6.1 in TEST HA ID-75236.
+2. Start the QA app if required; open Web UI as the normal HA admin.
+3. Confirm new "Έλεγχος παράδοσης χωρίς δημιουργία" form appears.
+4. STOP and send screenshot WITHOUT any ticket.
+
+NEXT (AFTER FIRST SCREENSHOT)
+If Portal 3.6.397 has expired its existing 15-minute ticket, arm a fresh
+request ONLY after explicit instruction and use the read-only probe to
+classify the failure before attempting any user creation. NEVER reuse or
+share the bearer ticket and do NOT retry CREATE pending diagnosis.
+
+NOTE: The earlier successful synthetic HA-to-Portal bridge remains unaffected.

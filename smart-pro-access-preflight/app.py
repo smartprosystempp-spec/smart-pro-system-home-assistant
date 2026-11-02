@@ -26,9 +26,9 @@ from persistent_qa import (inspect_retained, create_retained, revoke_retained,
                            RetainedAccountError)
 from credential_lab_qa import (inspect_lab, create_lab, revoke_lab, LabCredentialError)
 from consent_qa import LAB_CREATE_WORD, LAB_REVOKE_WORD, HANDOFF_WORD
-from secure_handoff_qa import deliver_laboratory_account, HandoffError
+from secure_handoff_qa import deliver_laboratory_account, preflight, HandoffError
 
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.1"
 ROUND_TRIP_LOCK = threading.Lock()
 PORT = 8107
 SUPERVISOR_INGRESS_PEER = ipaddress.ip_address("172.30.32.2")
@@ -180,7 +180,7 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
                 create_token: str = '', revoke_token: str = '',
                 classification: dict[str, str] | None = None,
                 lab_state: str = "unknown", lab_create_token: str = "",
-                lab_revoke_token: str = "", handoff_token: str = "") -> bytes:
+                lab_revoke_token: str = "", handoff_token: str = "", handoff_probe_token: str = "") -> bytes:
     """Never render target IDs, access secrets, or a write action for non-admins."""
     ok = outcome['is_admin'] is True
     title = ('Διαχειριστής Home Assistant — επιβεβαιώθηκε και από το Core'
@@ -244,8 +244,16 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
         }.get(lab_state, 'Άγνωστη κατάσταση· καμία ενέργεια.')
         lab_panel = '<section><h2>2. Ασφαλής δοκιμή πραγματικού login (μόνο TEST HA)</h2><p>' + html.escape(label) + '</p>'
         lab_panel += '<p class="note">Νέος απομονωμένος χρήστης με διαχειριστικά δικαιώματα, αλλά ΜΟΝΟ τοπική πρόσβαση. Ο κωδικός δημιουργείται τυχαία μόνο μετά την έγκριση και παραδίδεται κρυπτογραφημένος στο συγκεκριμένο Admin Portal request. Δεν εμφανίζεται εδώ.</p>'
+        if lab_state == 'absent' and handoff_probe_token:
+            lab_panel += f"""<section><h2>3. Έλεγχος σύνδεσης Portal — ΧΩΡΙΣ δημιουργία χρήστη</h2>
+<p>Ελέγχουμε τον εφάπαξ κωδικό και τον παραλήπτη, χωρίς αλλαγές σε λογαριασμούς Home Assistant.</p>
+<form method="post" action="lab-handoff-preflight" id="lab-handoff-preflight-form">
+<input type="hidden" name="csrf" value="{html.escape(handoff_probe_token,quote=True)}">
+<label>Εφάπαξ κωδικός μεταφοράς Portal<input name="ticket" autocomplete="off" maxlength="96" required></label>
+<button class="probe-button" type="submit">Έλεγχος παράδοσης χωρίς δημιουργία</button>
+</form><output id="handoff-preflight-result" role="status" aria-live="polite"></output></section>"""
         if lab_state == 'absent' and handoff_token:
-            lab_panel += f"""<section><h2>3. Ασφαλής παράδοση πραγματικού QA administrator στο Portal</h2>
+            lab_panel += f"""<section><h2>4. Ασφαλής παράδοση πραγματικού QA administrator στο Portal</h2>
 <p>Μόνο δοκιμαστικό HA. Πρώτα προετοίμασε την παραλαβή στο Admin Portal της σωστής εγκατάστασης. Αντέγραψε τον εφάπαξ κωδικό μεταφοράς εδώ. Ο λογαριασμός δημιουργείται μόνο μετά από ρητή έγκριση.</p>
 <form method="post" action="lab-handoff-create" id="lab-handoff-create-form">
 <input type="hidden" name="csrf" value="{html.escape(handoff_token,quote=True)}">
@@ -264,7 +272,7 @@ def render_page(outcome: dict[str, str | bool], *, retained_state: str = 'unknow
         lab_panel += '<output id="lab-login-result" role="status" aria-live="polite"></output></section>'
     return f"""<!doctype html><html lang="el"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
-<title>Smart Pro Access — QA 0.6.0</title>
+<title>Smart Pro Access — QA 0.6.1</title>
 <style>
 :root{{color-scheme:light dark}}*{{box-sizing:border-box}}
 body{{margin:0;background:#101722;color:#e9eef7;font:16px/1.55 system-ui,-apple-system,sans-serif}}
@@ -328,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
         state = 'unknown'
         create_token = revoke_token = ''
         lab_state = 'unknown'
-        lab_create_token = lab_revoke_token = handoff_token = ''
+        lab_create_token = lab_revoke_token = handoff_token = handoff_probe_token = ''
         if outcome['is_admin']:
             state = inspect_retained(supervisor_token=os.environ.get('SUPERVISOR_TOKEN',''))
             lab_state = inspect_lab(supervisor_token=os.environ.get('SUPERVISOR_TOKEN',''))
@@ -336,19 +344,21 @@ class Handler(BaseHTTPRequestHandler):
             # The 0.4.0 non-login lifecycle is completed and archived.
             # No legacy browser consent token is issued by the 0.5.0 UI.
             # The 0.5.0 test is solely the distinct LOGIN LAB account.
-            if identity and lab_state == 'absent' and not attempted('lab_create'):
-                handoff_token = issue(identity,action='handoff_create')
+            if identity and lab_state == 'absent':
+                handoff_probe_token = issue(identity,action='handoff_probe')
+                if not attempted('handoff_create'):
+                    handoff_token = issue(identity,action='handoff_create')
             elif identity and lab_state in ('login_ready','incomplete_no_login') and not attempted('lab_revoke'):
                 lab_revoke_token = issue(identity,action='lab_revoke')
         self._write(status, render_page(outcome, retained_state=state,
                     create_token=create_token, revoke_token=revoke_token,
-                    lab_state=lab_state,lab_create_token=lab_create_token,lab_revoke_token=lab_revoke_token, handoff_token=handoff_token),
+                    lab_state=lab_state,lab_create_token=lab_create_token,lab_revoke_token=lab_revoke_token, handoff_token=handoff_token, handoff_probe_token=handoff_probe_token),
                     'text/html; charset=utf-8')
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if path not in ('/origin-check', '/retain-admin', '/revoke-admin',
-                        '/lab-login-create', '/lab-login-revoke', '/lab-handoff-create'):
+                        '/lab-login-create', '/lab-login-revoke', '/lab-handoff-create', '/lab-handoff-preflight'):
             self._write(HTTPStatus.METHOD_NOT_ALLOWED, b'Unsupported action', 'text/plain')
             return
         if path == '/lab-login-create':
@@ -392,19 +402,42 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 512:
                 raise ValueError()
             payload = json.loads(self.rfile.read(length).decode('utf-8','strict'))
-            expected = {'csrf','confirm','ticket'} if path == '/lab-handoff-create' else {'csrf','confirm'}
+            expected = ({'csrf','ticket'} if path == '/lab-handoff-preflight' else
+                        {'csrf','confirm','ticket'} if path == '/lab-handoff-create' else {'csrf','confirm'})
             if not isinstance(payload,dict) or set(payload) != expected:
                 raise ValueError()
-            if not isinstance(payload['csrf'],str) or not isinstance(payload['confirm'],str) or (path == '/lab-handoff-create' and (not isinstance(payload['ticket'],str) or len(payload['ticket'])>96)):
+            if (not isinstance(payload['csrf'],str) or
+                (path != '/lab-handoff-preflight' and not isinstance(payload['confirm'],str)) or
+                (path in ('/lab-handoff-create','/lab-handoff-preflight') and
+                (not isinstance(payload['ticket'],str) or len(payload['ticket'])>96))):
                 raise ValueError()
         except (ValueError,UnicodeDecodeError,json.JSONDecodeError):
             self._write(HTTPStatus.BAD_REQUEST,b'invalid_payload_no_write','text/plain')
             return
         action = {'/retain-admin':'create','/revoke-admin':'revoke',
-                  '/lab-login-create':'lab_create','/lab-login-revoke':'lab_revoke', '/lab-handoff-create':'handoff_create'}[path]
+                  '/lab-login-create':'lab_create','/lab-login-revoke':'lab_revoke', '/lab-handoff-create':'handoff_create',
+                  '/lab-handoff-preflight':'handoff_probe'}[path]
         identity = _single_header(self.headers,'X-Remote-User-Id')
-        if not identity or not consume(payload['csrf'],identity,payload['confirm'],action=action):
+        if not identity or not consume(payload['csrf'],identity,
+                 payload.get('confirm',''),action=action):
             self._write(HTTPStatus.FORBIDDEN,b'approval_invalid_no_write','text/plain')
+            return
+        if action == 'handoff_probe':
+            # READ ONLY. No account changes, not counted as a CREATE attempt.
+            # Give the browser only a bounded opaque status code, no ticket/key/identity.
+            try:
+                preflight(payload['ticket'])
+                code = 'handoff_preflight_ready_no_write'
+            except HandoffError as error:
+                code = str(error) if str(error) in (
+                    'handoff_ticket_invalid_no_write',
+                    'handoff_preflight_denied_no_write',
+                    'handoff_remote_unavailable',
+                    'handoff_response_invalid') else 'handoff_preflight_failed_no_write'
+            except Exception:
+                code = 'handoff_preflight_failed_no_write'
+            self._write(HTTPStatus.OK,json.dumps({'code':code},separators=(',',':')).encode(),
+                        'application/json; charset=utf-8')
             return
         if not ROUND_TRIP_LOCK.acquire(blocking=False):
             self._write(HTTPStatus.CONFLICT,b'qa_action_busy_no_write','text/plain')

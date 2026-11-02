@@ -1,26 +1,9 @@
-SMART PRO ACCESS PREFLIGHT 0.5.0 / INTERNAL QA
-Date: 2026-11-01
-Baseline: exact LIVE GitHub 0.4.0 source 9/9 blob hashes matched.
-Scope: lab-only, local-only TEST Home Assistant credentials and revocation.
-
-Isolated Python unit + real localhost HTTP tests: 145/145 PASS
-Python AST / py_compile: PASS
-Node.js JavaScript syntax: PASS
-Credential create/attach/readback/revoke fake Core scenarios: PASS
-Fail-closed direct network / forged origin / wrong approval / replay tests: PASS
-Independent lab_create / lab_revoke consent 180s: PASS
-Password generated via Python secrets.token_urlsafe(36): PASS
-No plaintext password in application files, logs, Portal or persistence: PASS (code checks)
-No Docker publication, no changes to other Smart Pro add-ons: PASS (package allow-list)
-Zip integrity, no duplicate paths: PASS
-Real HA 0.5.0 credential create, actual login and revoke: PENDING LIVE QA
-
-Security boundaries: HA admin auth through Ingress plus fresh Core user inventory;
-role pinned system-admin, local_only true, non-owner, exact QA lab name;
-password shown once to HA admin browser. No vault / Portal / remote Smart Pro access.
-If provisioning outcome is uncertain: inspect HA Users and DO NOT retry.
-The optional older QA lifecycle is NOT reissued fresh approval tokens in the 0.5.0 UI.
-
-Live test first action: open new UI and provide screenshot WITHOUT password.
-Then separately approve one lab account creation, local login, and full revocation.
-DO NOT SHARE PASSWORD IN CHATS OR SCREENSHOTS. NEVER install in production.
+Smart Pro Access Preflight QA 0.6.1 — read-only handoff preflight diagnostic
+Offline deterministic checks: 161/161 unittest PASS
+Node JavaScript --check: PASS
+Python py_compile (app.py/consent_qa.py): PASS
+Real local HTTP tests: preflight READY, denied, origin rejection PASS
+No HA account API executed by preflight branch (verified via test mocks)
+No live Home Assistant/WordPress QA yet.
+Previous 0.6.0 live attempt: ambiguous browser response; user absent; Portal waiting.
+This version is a diagnosis, NOT a proven correction of the underlying fault.

@@ -24,6 +24,35 @@
       probeTarget.textContent = 'browser_fetch_failed_no_write (χωρίς αλλαγές χρήστη)';
     } finally { button.disabled = false; }
   });
+  // Read-only ticket preflight. Returns fixed status only; no secrets, no HA writes.
+  const preForm = document.getElementById('lab-handoff-preflight-form');
+  const preResult = document.getElementById('handoff-preflight-result');
+  if (preForm && preResult) preForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = preForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    preResult.textContent = 'Έλεγχος επικοινωνίας... Χωρίς δημιουργία χρήστη.';
+    try {
+      const response = await fetch(preForm.action, {
+        method:'POST', mode:'same-origin', credentials:'same-origin',
+        cache:'no-store', redirect:'error',
+        headers:{'Content-Type':'application/json','X-Smart-Pro-QA-Action':'v1'},
+        body:JSON.stringify({csrf:preForm.querySelector('input[name="csrf"]').value,
+          ticket:preForm.querySelector('input[name="ticket"]').value.trim()})
+      });
+      if (!response.ok || !response.headers.get('Content-Type')?.includes('application/json'))
+        throw Error('handoff_preflight_http_' + response.status);
+      const data=await response.json();
+      if (!/^[a-z0-9_]{3,110}$/.test(data.code||'')) throw Error('handoff_preflight_bad_response');
+      preResult.textContent='Αποτέλεσμα: '+data.code;
+    } catch (error) {
+      const reason=String(error.message || 'failed');
+      preResult.textContent=/^handoff_preflight_http_[0-9]{3}$/.test(reason)
+        ? 'Αποτέλεσμα: '+reason : 'handoff_preflight_network_or_browser_failure';
+    } finally {
+      preForm.querySelector('input[name="ticket"]').value='';
+    }
+  });
   // Real credentials NEVER enter browser JS. Only a one-time Portal ticket is posted.
   const handoffForm = document.getElementById('lab-handoff-create-form');
   const handoffResult = document.getElementById('handoff-create-result');
