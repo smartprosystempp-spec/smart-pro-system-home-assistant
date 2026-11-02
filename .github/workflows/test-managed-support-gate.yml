@@ -1,0 +1,25 @@
+name: Managed Support stable action-gate regression
+on:
+  pull_request:
+    paths:
+      - "smart-pro-managed-support/**"
+      - "tests/test_managed_support_stable_gate.py"
+      - ".github/workflows/test-managed-support-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stable-action-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: python -m py_compile smart-pro-managed-support/app.py tests/test_managed_support_stable_gate.py
+      - name: Isolated POST guard regression tests
+        run: python -m unittest discover -s tests -p 'test_managed_support_stable_gate.py' -v
