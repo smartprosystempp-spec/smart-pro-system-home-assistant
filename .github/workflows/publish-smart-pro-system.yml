@@ -42,10 +42,10 @@ jobs:
           context: ./smart-pro-system
           image: ${{ matrix.image }}
           image-tags: |
-            3.0.28
+            3.0.29
             latest
           push: "true"
-          version: 3.0.28
+          version: 3.0.29
 
   manifest:
     name: Publish multi-arch manifest
@@ -55,6 +55,7 @@ jobs:
       id-token: write
       packages: write
     steps:
+      - uses: actions/checkout@v6
       - name: Publish amd64 + aarch64 manifest
         uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.09.0
         with:
@@ -62,5 +63,5 @@ jobs:
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           image-name: smart-pro-system
           image-tags: |
-            3.0.28
+            3.0.29
             latest
