@@ -46,3 +46,11 @@ User supplied complete WordPress plugin ZIP `smart-pro-remote-session-broker-0.6
 
 ### Coordinated release gate
 Do not ship an isolated Broker or Managed Support build for this feature. The planned first live QA on ID-28422 requires the compatible Broker, Portal, Smart Pro System and Managed Support components, approved explicit consent, and a single audit-backed enrollment claim. Existing 3.19.3 stays stopped.
+
+## Isolated Broker 0.60.34 reservation ledger (2026-11-02)
+- Offline-only follow-up to 0.60.33. New dedicated SQL table with a permanent UNIQUE installation reference plus UNIQUE opaque non-bearer request ID and an expiry; managed-schema 11 → 12 **only in staged artifact**.
+- Internal `reserve_admin_approval()` checks exact typed Installation ID, logged-in privileged operator, scoped WP nonce, 64-hex trusted device-binding digest and live admission readiness. A second request is denied even when the first has expired; reconcile deliberately remains a separately authorized future operation.
+- Data stores only the operator/consent digest, bounded request metadata and device-binding hash: no node secret, SPM pairing token, Home Assistant credential, `.msh`, Managed permission or API token.
+- 22/22 isolated ledger tests PASS and all Broker PHP files lint PASS, single-root ZIP integrity PASS.
+- **The reservation is not an identity claim, and does not start provisioning.** No route or UI calls the method; no database migration has occurred on any installation. Package is INTERNAL / DO NOT INSTALL.
+- Remaining critical work: signed Portal approval transport, bound client handoff and an atomic Broker identity claim with lost-response reconciliation; previous real-client tests must not be repeated before a coordinated release.
