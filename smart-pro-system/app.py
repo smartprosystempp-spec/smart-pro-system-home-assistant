@@ -27,6 +27,7 @@ import secrets
 import ipaddress
 import math
 from pathlib import Path
+from managed_zero_copy_offer import consume_heartbeat_offer
 
 PORT = 8099
 OFFLINE_DEVICES = {}
@@ -4320,6 +4321,9 @@ def send_portal_heartbeat():
         if isinstance(external_portal_state, dict):
             connection['external_access_portal'] = external_portal_state
         connection['last_error'] = ''
+        # Passive offer delivered only by the already token-authenticated Portal heartbeat.
+        # It is non-authorizing metadata; never triggers Managed identity creation.
+        consume_heartbeat_offer(response, connection.get('installation_id', ''))
         if response.get('installation_id'):
             connection['installation_id'] = str(response['installation_id'])
         connection['open_request_count'] = int(response.get('open_request_count', connection.get('open_request_count', 0)) or 0)
