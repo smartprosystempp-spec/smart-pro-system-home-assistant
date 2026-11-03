@@ -7,11 +7,13 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
         python3 \
+        python3-nacl \
         util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 COPY run.sh /run.sh
 COPY app.py /opt/smart-pro/app.py
+COPY managed_zero_copy_receiver.py /opt/smart-pro/managed_zero_copy_receiver.py
 RUN chmod 0755 /run.sh /opt/smart-pro/app.py
 
 ENV SMART_PRO_MANAGED_VERSION="${BUILD_VERSION}" \
