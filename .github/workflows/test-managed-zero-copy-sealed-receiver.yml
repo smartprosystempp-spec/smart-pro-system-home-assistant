@@ -5,9 +5,11 @@ on:
     paths:
       - 'contracts/managed-zero-copy-envelope.php'
       - 'smart-pro-managed-support/managed_zero_copy_receiver.py'
+      - 'smart-pro-managed-support/managed_zero_copy_public_endpoint.py'
       - 'smart-pro-managed-support/Dockerfile'
       - 'tests/fixtures/managed_zero_copy_seal.php'
       - 'tests/test_managed_zero_copy_sealed_receiver.py'
+      - 'tests/test_managed_zero_copy_public_endpoint.py'
       - '.github/workflows/test-managed-zero-copy-sealed-receiver.yml'
   workflow_dispatch:
 
@@ -31,8 +33,9 @@ jobs:
           php -r 'if (!function_exists("sodium_crypto_box_seal")) exit(1);'
       - name: Python syntax and interop tests
         run: |
-          python -m py_compile smart-pro-managed-support/managed_zero_copy_receiver.py
+          python -m py_compile smart-pro-managed-support/managed_zero_copy_receiver.py smart-pro-managed-support/managed_zero_copy_public_endpoint.py
           python -m unittest discover -s tests -p 'test_managed_zero_copy_sealed_receiver.py' -v
+          python -m unittest discover -s tests -p 'test_managed_zero_copy_public_endpoint.py' -v
 
   addon-image-smoke:
     runs-on: ubuntu-latest
@@ -49,4 +52,4 @@ jobs:
         run: |
           docker run --rm --entrypoint python3 \
             smart-pro-managed-support:zero-copy-smoke \
-            -c 'import sys; sys.path.insert(0, "/opt/smart-pro"); import nacl; import managed_zero_copy_receiver'
+            -c 'import sys; sys.path.insert(0, "/opt/smart-pro"); import nacl; import managed_zero_copy_receiver; import managed_zero_copy_public_endpoint'
