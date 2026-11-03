@@ -1,0 +1,8 @@
+SMART PRO SYSTEM — ASSISTED PAIRING 3.19.4 SOURCE CANDIDATE
+
+NOT a WordPress ZIP and NOT directly installable through Home Assistant add-on store.
+No GitHub commits or builds have been performed. Requires explicitly approved, user-visible repository update and multi-arch image build/publish before HA update.
+Changes: only Managed Support 3.19.4 initial /pair allowed, guarded by CSRF, absence of identity, stopped persistent worker and local Managed policy. Legacy archived actions remain locked.
+DO NOT publish/install before verifying active Broker 0.60.49 manual issue/consume compatibility and supervised restore/testing. This package does NOT implement Portal->customer automatic token delivery.
+
+Before any live pairing: issue 15-minute code from Admin Portal/Broker for the exact installation, confirm correct Portal installation ID and local Managed policy.

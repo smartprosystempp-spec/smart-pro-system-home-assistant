@@ -28,12 +28,12 @@ def invoke(path):
 
 class StableGateTests(unittest.TestCase):
     def test_expected_version_and_version_independent_gate(self):
-        self.assertEqual(app.CONTINUOUS_LIFECYCLE_VERSION, "3.19.3")
+        self.assertEqual(app.CONTINUOUS_LIFECYCLE_VERSION, "3.19.4")
         self.assertTrue(app.STABLE_POST_ACTIONS_ONLY)
 
     def test_legacy_post_routes_are_denied_without_mutation(self):
         forbidden = [
-            "pair", "enrollment-check", "settings-check",
+            "enrollment-check", "settings-check",
             "first-device-execution-canary", "group-migration-preflight",
             "group-migration-target-settings", "group-migration-canary",
             "group-identity-reseed-canary", "candidate-reconnect-canary",
@@ -87,13 +87,13 @@ app._serve_until_shutdown(server)
         with mock.patch.object(app, "VERSION", "99.99.99"), \
              mock.patch.object(app, "read_policy", return_value={}), \
              mock.patch.object(app, "render_page", return_value="safe"):
-            self.assertEqual(invoke("pair"), [409])
+            self.assertEqual(invoke("candidate-promotion"), [409])
             self.assertEqual(invoke("candidate-promotion"), [409])
 
 
     def test_pairing_ui_is_always_locked_in_stable_source(self):
         source = SOURCE.read_text(encoding="utf-8")
-        self.assertIn("activation_locked = STABLE_POST_ACTIONS_ONLY", source)
+        self.assertIn("activation_locked = STABLE_POST_ACTIONS_ONLY and not ASSISTED_INITIAL_PAIRING_ENABLED", source)
         self.assertNotIn("activation_locked = VERSION ==", source)
 
 

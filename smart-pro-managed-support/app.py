@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.3")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.4")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -127,9 +127,11 @@ FIRST_DEVICE_MESH_HINT_RE = re.compile(r"^[a-f0-9]{16}$")
 FIRST_DEVICE_INSTALLATION = "ID-34973"
 FIRST_DEVICE_GROUP = "Smart Pro Managed — ID-34973"
 FIRST_DEVICE_EXECUTION_VERSION = "3.17.4"
-CONTINUOUS_LIFECYCLE_VERSION = "3.19.3"
-# Stable production surface: never unlock archived POST actions on a version bump.
+CONTINUOUS_LIFECYCLE_VERSION = "3.19.4"
+# Stable production surface: archived actions stay locked regardless of version.
 STABLE_POST_ACTIONS_ONLY = True
+# Narrow recovery of one-time initial pairing only; not a legacy action unlock.
+ASSISTED_INITIAL_PAIRING_ENABLED = True
 FIRST_DEVICE_EXECUTION_MAX_RUNTIME = 75
 FIRST_DEVICE_EXECUTION_SHUTDOWN_GRACE = 3
 MIN_AGENT_BYTES = 100000
@@ -5523,7 +5525,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 
     pair_html = ""
     if identity is None:
-        activation_locked = STABLE_POST_ACTIONS_ONLY
+        activation_locked = STABLE_POST_ACTIONS_ONLY and not ASSISTED_INITIAL_PAIRING_ENABLED
         disabled = "" if (local_allowed and not activation_locked) else " disabled"
         activation_note = (
             '<div class="tool-lock">3.19.0: η παλιά τεχνική pairing φόρμα παραμένει ορατή μόνο ως αναφορά και είναι κλειδωμένη. '
@@ -5533,7 +5535,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
         pair_html = f'''
 <section class="pairbox operational-card">
 <h2>Αρχική ενεργοποίηση Managed Support</h2>
-<p>Η τεχνική pairing φόρμα διατηρείται μόνο ως ιστορική αναφορά. Η πραγματική αρχική ενεργοποίηση πελάτη θα σχεδιαστεί γύρω από το Customer Portal και δεν ενεργοποιείται από αυτή την έκδοση.</p>
+<p>Ελεγχόμενη αρχική ενεργοποίηση: εισαγάγετε προσωρινό κωδικό που εκδόθηκε από τον Smart Pro Broker. Ο κωδικός χρησιμοποιείται μία φορά και δεν αποθηκεύεται στην οθόνη.</p>
 {activation_note}
 <form method="post" action="pair" autocomplete="off">
 <input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
@@ -6696,7 +6698,7 @@ def stop_router_compatibility():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SmartProManaged/3.19.3"
+    server_version = "SmartProManaged/3.19.4"
 
     def _send(self, code, body, content_type):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -6815,13 +6817,16 @@ class Handler(BaseHTTPRequestHandler):
         if VERSION == FIRST_DEVICE_EXECUTION_VERSION and not (is_first_device_execution or is_first_device_retry_reset):
             self._send(409, render_page(read_policy(), "Η 3.17.4 είναι κλειδωμένο controlled retry/reset checkpoint. Επιτρέπονται μόνο reset consume και αργότερα explicit armed first-device execution.", "bad"), "text/html; charset=utf-8")
             return
-        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop):
+        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop or (ASSISTED_INITIAL_PAIRING_ENABLED and is_pair)):
             self._send(409, render_page(read_policy(), "Η stable Managed λειτουργία επιτρέπει μόνο ρητή ενεργοποίηση ή παύση της μόνιμης σύνδεσης. Οι παλιές mutation/test ενέργειες παραμένουν κλειδωμένες, ανεξάρτητα από την έκδοση.", "bad"), "text/html; charset=utf-8")
             return
         if PERSISTENT_WORKER_ACTIVE and not (is_persistent_stop or is_group_migration_preflight or is_group_migration_target_settings or is_group_migration_canary or is_group_identity_reseed_canary or is_candidate_reconnect_canary or is_candidate_promotion):
             self._send(409, render_page(read_policy(), "Η continuous Managed λειτουργία είναι ενεργή. Επιτρέπονται μόνο ασφαλής τερματισμός ή οι verification-only migration έλεγχοι.", "bad"), "text/html; charset=utf-8")
             return
         if is_pair:
+            if PERSISTENT_WORKER_ACTIVE:
+                self._send(409, render_page(read_policy(), "Η Managed σύνδεση εκτελείται ήδη. Διακόψτε την πριν από νέα αρχική ενεργοποίηση.", "bad"), "text/html; charset=utf-8")
+                return
             if load_identity() is not None:
                 self._send(409, render_page(read_policy(), "Υπάρχει ήδη ενεργή Managed identity σε αυτό το add-on.", "bad"), "text/html; charset=utf-8")
                 return
@@ -7102,7 +7107,7 @@ if __name__ == "__main__":
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
         if STABLE_POST_ACTIONS_ONLY:
-            print("[managed] 3.19.3 stable action gate: unattended supervisor available; explicit start/stop only; stable identity reuse required; archived actions locked", flush=True)
+            print("[managed] 3.19.4 stable action gate: start/stop and guarded initial pairing only; archived actions locked", flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
     router_compat_started = False

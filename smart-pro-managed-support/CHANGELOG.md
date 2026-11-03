@@ -1,3 +1,12 @@
+## 3.19.4 — Assisted initial pairing restoration (source candidate; not published)
+
+- Restore **only** one-time /pair with CSRF, existing-identity denial, runtime-active denial and existing local Managed policy enforcement.
+- Keep all archived enrollment, migration, candidate and technical actions locked.
+- Preserve /data, node identity, MeshAgent runtime and reconnect semantics.
+- No Portal, Broker, Backup, Tunnel or Smart Pro System changes.
+- Manual pairing is a recovery milestone, **not** the final automatic customer-approved code handoff.
+- Source-only; GHCR image not published.
+
 ## 3.19.3 — Stable action-gate safety hotfix (pre-release)
 
 - Locks archived initial pairing, enrollment, settings, migration and candidate mutation POST endpoints independently of VERSION; only explicit continuous-runtime start/stop remain accepted by the stable UI.
