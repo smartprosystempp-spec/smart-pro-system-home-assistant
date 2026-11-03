@@ -33,3 +33,20 @@ jobs:
         run: |
           python -m py_compile smart-pro-managed-support/managed_zero_copy_receiver.py
           python -m unittest discover -s tests -p 'test_managed_zero_copy_sealed_receiver.py' -v
+
+  addon-image-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build experimental add-on image (do not publish)
+        run: |
+          docker build -f smart-pro-managed-support/Dockerfile \
+            --build-arg BUILD_VERSION=3.19.3 \
+            --build-arg BUILD_ARCH=amd64 \
+            -t smart-pro-managed-support:zero-copy-smoke \
+            smart-pro-managed-support
+      - name: Verify PyNaCl available inside image
+        run: |
+          docker run --rm --entrypoint python3 \
+            smart-pro-managed-support:zero-copy-smoke \
+            -c 'import nacl; import managed_zero_copy_receiver'
