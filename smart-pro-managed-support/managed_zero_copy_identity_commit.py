@@ -78,7 +78,11 @@ def _valid_live_broker_response(reply, record, now):
             or auth.get("authorized") is not True
             or type(valid_until) is not int or valid_until <= now + 15
             or auth.get("portal_paired") is not True
-            or auth.get("managed_entitlement") is not True):
+            or auth.get("managed_entitlement") is not True
+            or auth.get("subscription_status") != "active"
+            or auth.get("managed_relationship_state") != "enrolled"
+            or auth.get("remote_access") is not False
+            or auth.get("meshcentral") is not False):
         return False
     return True
 
