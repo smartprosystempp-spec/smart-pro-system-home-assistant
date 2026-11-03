@@ -12,7 +12,7 @@ from pathlib import Path
 from nacl.public import PrivateKey, SealedBox
 from nacl.exceptions import CryptoError
 from managed_zero_copy_receiver import (
-    PRIVATE_KEY, _offer_ok, _read_private, open_candidate_envelope,
+    PRIVATE_KEY, _delivery_context_ok, _read_private, open_candidate_envelope,
 )
 
 CHALLENGE_CONTRACT = "smart-pro-managed-zero-copy-delivery-challenge-v1"
@@ -37,7 +37,7 @@ def prove_receiver_challenge(challenge, offer, installation_id, architecture,
                              *, key_path=PRIVATE_KEY, now=None):
     now = int(time.time() if now is None else now)
     iid = str(installation_id or "").strip().upper()
-    if not _offer_ok(offer, iid, now) or architecture not in ("amd64", "aarch64"):
+    if not _delivery_context_ok(offer, iid, now) or architecture not in ("amd64", "aarch64"):
         return None
     if not isinstance(challenge, dict):
         return None
@@ -108,7 +108,7 @@ def verify_original_delivery(delivery, proof, offer, installation_id, architectu
                              *, key_path=PRIVATE_KEY, now=None):
     now = int(time.time() if now is None else now)
     iid = str(installation_id or "").strip().upper()
-    if (not _offer_ok(offer, iid, now) or architecture not in ("amd64", "aarch64")
+    if (not _delivery_context_ok(offer, iid, now) or architecture not in ("amd64", "aarch64")
             or not isinstance(delivery, dict) or not isinstance(proof, dict)):
         return None
     if (delivery.get("contract") != DELIVERY_CONTRACT
