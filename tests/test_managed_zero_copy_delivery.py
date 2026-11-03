@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "smart-pro-managed-support"))
-from managed_zero_copy_receiver import prepare_receiver
+from managed_zero_copy_receiver import prepare_receiver, private_delivery_context
 from managed_zero_copy_delivery import prove_receiver_challenge, verify_original_delivery
 
 NOW = 1793685000
@@ -128,6 +128,40 @@ class OriginalDeliveryTests(unittest.TestCase):
             identity_reissued=True)))
         self.assertIsNone(self.open(delivery=self.delivery(
             runtime_authorized=True)))
+
+    def test_private_context_after_pending_offer_disappears(self):
+        # The Tools /share pending offer is no longer present after issuance.
+        # A private non-bearer snapshot keeps the original bounded request ref.
+        context = private_delivery_context(IID, REF, key_path=self.key, now=NOW + 10)
+        self.assertEqual(context["status"], "delivery_recovery")
+        self.assertTrue(context["not_a_bearer_grant"])
+        self.assertFalse(context["claim_authorized"])
+        self.assertFalse(context["identity_created"])
+        self.assertNotIn("private_key_hex", context)
+        self.assertIsNone(prepare_receiver(
+            context, IID, key_path=self.key, now=NOW + 10))
+        proof = prove_receiver_challenge(
+            self.generated["challenge"], context, IID, "amd64",
+            key_path=self.key, now=NOW + 10)
+        self.assertEqual(proof["proof_hex"], self.generated["expected_proof"])
+        candidate = verify_original_delivery(
+            self.delivery(), proof, context, IID, "amd64",
+            key_path=self.key, now=NOW + 10)
+        self.assertEqual(candidate["node_id"], "SPMN-" + "B" * 32)
+        self.assertFalse(candidate["identity_persisted"])
+        self.assertFalse(candidate["runtime_authorized"])
+
+    def test_private_context_expiry_or_tampering_never_extends(self):
+        self.assertIsNone(private_delivery_context(
+            IID, REF, key_path=self.key, now=NOW + 500))
+        self.assertIsNone(private_delivery_context(
+            IID, "SPMZ-"+"F"*32, key_path=self.key, now=NOW + 5))
+        data = json.loads(self.key.read_text())
+        data["offer_expires_at"] = NOW + 9999
+        self.key.write_text(json.dumps(data))
+        self.key.chmod(0o600)
+        self.assertIsNone(private_delivery_context(
+            IID, REF, key_path=self.key, now=NOW + 5))
 
     def test_ttl_denial_and_context_bound(self):
         self.assertIsNone(self.proof(now=NOW + 90))
