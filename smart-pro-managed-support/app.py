@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 import ipaddress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from managed_zero_copy_public_endpoint import public_receiver_offer
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
@@ -6718,9 +6717,13 @@ class Handler(BaseHTTPRequestHandler):
         local = read_policy()
         if path == "/internal/zero-copy/receiver-public":
             # Internal host-only discovery; never exposes a private receiver key.
-            public = public_receiver_offer(
-                self.client_address[0], local, load_identity(), ARCH
-            )
+            try:
+                from managed_zero_copy_public_endpoint import public_receiver_offer
+                public = public_receiver_offer(
+                    self.client_address[0], local, load_identity(), ARCH
+                )
+            except (ImportError, OSError, ValueError):
+                public = None
             if public is None:
                 self._send(403, '{"ok":false,"code":"receiver_unavailable"}',
                            "application/json; charset=utf-8")
