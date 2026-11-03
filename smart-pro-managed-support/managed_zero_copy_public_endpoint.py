@@ -29,7 +29,19 @@ def public_receiver_offer(peer_ip, policy_snapshot, existing_identity, arch,
     if not isinstance(policy, dict):
         return None
     iid = str(policy.get("installation_id") or "").strip().upper()
-    if not iid or policy.get("manual_pause") is True:
+    entitled = policy.get("entitlement")
+    subscription = policy.get("subscription")
+    health = policy.get("health")
+    if (not iid or policy.get("manual_pause") is True
+            or not isinstance(entitled, dict)
+            or entitled.get("managed_remote_support") is not True
+            or not isinstance(subscription, dict)
+            or subscription.get("status") != "active"
+            or subscription.get("services_active") is not True
+            or subscription.get("using_cached_state") is not False
+            or not isinstance(health, dict)
+            or health.get("portal_paired") is not True
+            or health.get("portal_sync_healthy") is not True):
         return None
     try:
         path = Path(offer_path)
