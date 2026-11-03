@@ -146,6 +146,39 @@ def build_proof_payload(offer, installation_id, *, key_path=KEY_FILE,
         return None
 
 
+
+def build_receiver_binding_proof(offer, installation_id, receiver_public_hex,
+                                 architecture, *, key_path=KEY_FILE, now=None):
+    """Pin Managed's public X25519 key to the paired Tools Ed25519 device."""
+    now = int(time.time() if now is None else now)
+    iid = str(installation_id or "").strip().upper()
+    if (not _valid_offer(offer, iid, now)
+            or architecture not in ("amd64", "aarch64")
+            or not isinstance(receiver_public_hex, str)
+            or not HEX64_RE.fullmatch(receiver_public_hex)):
+        return None
+    try:
+        found = _key_for(iid, Path(key_path))
+        if found is None:
+            return None
+        device_private, _ = found
+        ref = offer["request_ref"]
+        message = (f"SPMZ1|receiver_binding|{iid}|{ref}|"
+                   f"{receiver_public_hex}|{architecture}|{now}").encode("ascii")
+        return {
+            "contract": "smart-pro-managed-zero-copy-receiver-binding-v1",
+            "installation_id": iid, "request_ref": ref,
+            "receiver_public_key_hex": receiver_public_hex,
+            "architecture": architecture, "signed_at": now,
+            "signature_hex": device_private.sign(message).hex(),
+            "read_only": True, "claim_authorized": False,
+            "identity_created": False, "runtime_authorized": False,
+            "technician_access_granted": False,
+        }
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def accept_challenge_response(response, offer, installation_id, *,
                               path=CHALLENGE_FILE, now=None):
     """Persist only an authenticated, bounded challenge; no bearer credential."""
