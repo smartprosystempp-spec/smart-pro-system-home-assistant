@@ -126,7 +126,7 @@ function reset_schema(mysqli $db): void {
     );
     $consent = str_repeat('a', 64);
     $binding = str_repeat('b', 64);
-    $stmt->bind_param('ssssss', $iid, $ref, $approved, $expires, $consent, $binding, $approved);
+    $stmt->bind_param('sssssss', $iid, $ref, $approved, $expires, $consent, $binding, $approved);
     $iid = IID; $ref = REF;
     $stmt->execute();
     $stmt->close();
@@ -300,10 +300,7 @@ try {
         'lost response retry never remints node or original envelope');
 
     reset_schema($db);
-    [$code,$result] = finish(spawn('worker --fail'));
-    // Spawn mode passes arguments as a mode string and does not trigger --fail;
-    // test a deliberate rollback directly in a separate process below.
-    reset_schema($db);
+    // Test deliberate rollback in an independent worker process.
     $proc = proc_open([PHP_BINARY, __FILE__, 'worker', '--fail'],
         [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']], $pipes);
     fclose($pipes[0]);
