@@ -18,6 +18,7 @@ COPY ha_readback.py /
 COPY core_session_qa.py /
 COPY managed_zero_copy_offer.py /
 COPY managed_zero_copy_device_proof.py /
+COPY managed_zero_copy_receiver_transport.py /
 COPY app.py /
 RUN chmod a+x /run.sh
 
