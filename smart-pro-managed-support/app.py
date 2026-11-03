@@ -6715,6 +6715,22 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path.rstrip("/") or "/"
         local = read_policy()
+        if path == "/internal/zero-copy/receiver-public":
+            # Internal host-only discovery; never exposes a private receiver key.
+            try:
+                from managed_zero_copy_public_endpoint import public_receiver_offer
+                public = public_receiver_offer(
+                    self.client_address[0], local, load_identity(), ARCH
+                )
+            except (ImportError, OSError, ValueError):
+                public = None
+            if public is None:
+                self._send(403, '{"ok":false,"code":"receiver_unavailable"}',
+                           "application/json; charset=utf-8")
+            else:
+                self._send(200, json.dumps(public, separators=(",", ":")),
+                           "application/json; charset=utf-8")
+            return
         if path in ("/healthz", "/api/health"):
             policy = local.get("policy") if isinstance(local.get("policy"), dict) else {}
             server = get_server_state()

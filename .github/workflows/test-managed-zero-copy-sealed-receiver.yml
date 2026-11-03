@@ -1,0 +1,55 @@
+name: Managed Zero-Copy Sealed Receiver Tests
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/managed-zero-copy-envelope.php'
+      - 'smart-pro-managed-support/managed_zero_copy_receiver.py'
+      - 'smart-pro-managed-support/managed_zero_copy_public_endpoint.py'
+      - 'smart-pro-managed-support/Dockerfile'
+      - 'tests/fixtures/managed_zero_copy_seal.php'
+      - 'tests/test_managed_zero_copy_sealed_receiver.py'
+      - 'tests/test_managed_zero_copy_public_endpoint.py'
+      - '.github/workflows/test-managed-zero-copy-sealed-receiver.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crypto-interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test-only PyNaCl
+        run: python -m pip install 'PyNaCl>=1.5,<2'
+      - name: PHP syntax and crypto support
+        run: |
+          php -l contracts/managed-zero-copy-envelope.php
+          php -l tests/fixtures/managed_zero_copy_seal.php
+          php -r 'if (!function_exists("sodium_crypto_box_seal")) exit(1);'
+      - name: Python syntax and interop tests
+        run: |
+          python -m py_compile smart-pro-managed-support/managed_zero_copy_receiver.py smart-pro-managed-support/managed_zero_copy_public_endpoint.py
+          python -m unittest discover -s tests -p 'test_managed_zero_copy_sealed_receiver.py' -v
+          python -m unittest discover -s tests -p 'test_managed_zero_copy_public_endpoint.py' -v
+
+  addon-image-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build experimental add-on image (do not publish)
+        run: |
+          docker build -f smart-pro-managed-support/Dockerfile \
+            --build-arg BUILD_VERSION=3.19.3 \
+            --build-arg BUILD_ARCH=amd64 \
+            -t smart-pro-managed-support:zero-copy-smoke \
+            smart-pro-managed-support
+      - name: Verify PyNaCl available inside image
+        run: |
+          docker run --rm --entrypoint python3 \
+            smart-pro-managed-support:zero-copy-smoke \
+            -c 'import sys; sys.path.insert(0, "/opt/smart-pro"); import nacl; import managed_zero_copy_receiver; import managed_zero_copy_public_endpoint'
