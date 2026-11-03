@@ -29,6 +29,7 @@ import math
 from pathlib import Path
 from managed_zero_copy_offer import consume_heartbeat_offer
 from managed_zero_copy_device_proof import build_proof_payload, accept_challenge_response
+from managed_zero_copy_receiver_transport import build_pinned_receiver_proof
 
 PORT = 8099
 OFFLINE_DEVICES = {}
@@ -4310,6 +4311,22 @@ def _zc1_device_proof_payload(connection):
         return None
 
 
+def _zc1_receiver_binding_payload(connection):
+    """Local Supervisor-pinned public-key transport, never a Managed claim."""
+    arch = {'x86_64': 'amd64', 'aarch64': 'aarch64'}.get(os.uname().machine)
+    if not arch:
+        return None
+    try:
+        from managed_zero_copy_offer import DEFAULT_PATH
+        stat = DEFAULT_PATH.stat()
+        if stat.st_size <= 0 or stat.st_size > 2048:
+            return None
+        offer = json.loads(DEFAULT_PATH.read_text(encoding='utf-8'))
+        return build_pinned_receiver_proof(offer, connection.get('installation_id', ''), arch)
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return None
+
+
 def _zc1_accept_passive_offer_and_challenge(response, connection):
     """No identity creation, no claim, no runtime authority."""
     iid = str(connection.get('installation_id', '') or '')
@@ -4335,6 +4352,9 @@ def send_portal_heartbeat():
         zc_proof = _zc1_device_proof_payload(connection)
         if isinstance(zc_proof, dict):
             heartbeat_payload['managed_zero_copy_device'] = zc_proof
+        receiver_binding = _zc1_receiver_binding_payload(connection)
+        if isinstance(receiver_binding, dict):
+            heartbeat_payload['managed_zero_copy_receiver_binding'] = receiver_binding
         response = portal_api_request('heartbeat', heartbeat_payload, token=token)
         _zc1_accept_passive_offer_and_challenge(response, connection)
         response = _portal_maybe_run_fresh_diagnostic_check(response, token)
@@ -4351,6 +4371,9 @@ def send_portal_heartbeat():
             zc_proof = _zc1_device_proof_payload(connection)
             if isinstance(zc_proof, dict):
                 second_payload['managed_zero_copy_device'] = zc_proof
+            receiver_binding = _zc1_receiver_binding_payload(connection)
+            if isinstance(receiver_binding, dict):
+                second_payload['managed_zero_copy_receiver_binding'] = receiver_binding
             response = portal_api_request('heartbeat', second_payload, token=token)
             _zc1_accept_passive_offer_and_challenge(response, connection)
             _portal_maybe_process_managed_backup(response)
