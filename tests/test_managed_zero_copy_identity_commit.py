@@ -91,7 +91,8 @@ class CommitTests(unittest.TestCase):
             {"node_id": "SPMN-" + "D" * 32},
         ):
             cand = dict(candidate(), **changed)
-            self.assertEqual(self.commit(c=cand)["state"], "identity_conflict")
+            expected = "verification_denied" if "node_id" in changed else "identity_conflict"
+            self.assertEqual(self.commit(c=cand)["state"], expected)
         self.assertEqual(json.loads(self.target.read_text())["node_secret"], SECRET)
 
     def test_broker_must_authorize_exact_node(self):
