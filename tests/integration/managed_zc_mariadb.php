@@ -339,6 +339,9 @@ try {
                 node_count($db)===1,
         'new connection can safely issue once after the crashed worker');
 
+    // The crash-recovery issuance succeeded; begin the independent trigger case
+    // with a fresh locked ledger, not an already committed identity.
+    reset_schema($db);
     // A REAL database trigger raises a SQL error after node INSERT.
     $db->query("CREATE TRIGGER zcqa_refuse_ledger_update
         BEFORE UPDATE ON ".LEDGER." FOR EACH ROW
