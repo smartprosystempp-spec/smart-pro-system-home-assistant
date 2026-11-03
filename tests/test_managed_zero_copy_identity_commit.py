@@ -37,6 +37,9 @@ def reply():
             "schema_version": 1, "installation_id": IID,
             "valid_until": NOW + 600, "authorized": True,
             "portal_paired": True, "managed_entitlement": True,
+            "subscription_status": "active",
+            "managed_relationship_state": "enrolled",
+            "remote_access": False, "meshcentral": False,
         },
     }
 
@@ -107,6 +110,9 @@ class CommitTests(unittest.TestCase):
             {"authorized": False}, {"portal_paired": False},
             {"managed_entitlement": False}, {"installation_id": "ID-99999"},
             {"valid_until": NOW + 10}, {"schema_version": 2},
+            {"subscription_status": "expired"},
+            {"managed_relationship_state": "revoked"},
+            {"remote_access": True}, {"meshcentral": True},
         ):
             value = reply()
             value["server_authorization"].update(patch)
