@@ -5,8 +5,10 @@ on:
     paths:
       - 'smart-pro-system/app.py'
       - 'smart-pro-system/managed_zero_copy_offer.py'
+      - 'smart-pro-system/managed_zero_copy_device_proof.py'
       - 'smart-pro-system/Dockerfile'
       - 'tests/test_managed_zero_copy_offer.py'
+      - 'tests/test_managed_zero_copy_device_proof.py'
       - '.github/workflows/test-managed-zero-copy-offer.yml'
   workflow_dispatch:
 
@@ -21,9 +23,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Crypto dependency
+        run: python3 -m pip install 'cryptography>=42,<47'
       - name: Syntax
         run: |
-          python3 -m py_compile smart-pro-system/app.py smart-pro-system/managed_zero_copy_offer.py
-      - name: Passive offer tests
+          python3 -m py_compile smart-pro-system/app.py smart-pro-system/managed_zero_copy_offer.py smart-pro-system/managed_zero_copy_device_proof.py
+      - name: Passive offer and device proof tests
         run: |
-          python3 -m unittest discover -s tests -p 'test_managed_zero_copy_offer.py' -v
+          PYTHONPATH=smart-pro-system python3 -m unittest discover -s tests -p 'test_managed_zero_copy_offer.py' -v
+          PYTHONPATH=smart-pro-system python3 -m unittest discover -s tests -p 'test_managed_zero_copy_device_proof.py' -v
