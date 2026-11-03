@@ -1,0 +1,52 @@
+name: Managed Zero-Copy MariaDB Transaction Invariants
+
+on:
+  pull_request:
+    paths:
+      - 'tests/integration/managed_zc_mariadb.php'
+      - '.github/workflows/test-managed-zc-mariadb.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mariadb-transaction-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: zc_test
+          MARIADB_USER: zc_tester
+          MARIADB_PASSWORD: qa-only-password
+          MARIADB_ROOT_PASSWORD: qa-only-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      ZC_DB_HOST: 127.0.0.1
+      ZC_DB_PORT: 3306
+      ZC_DB_NAME: zc_test
+      ZC_DB_USER: zc_tester
+      ZC_DB_PASS: qa-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, sodium
+          coverage: none
+      - name: Verify PHP environment
+        run: |
+          php -v
+          php -r 'if (!extension_loaded("mysqli") || !function_exists("sodium_crypto_box_seal")) exit(1);'
+          php -l tests/integration/managed_zc_mariadb.php
+      - name: Execute real MariaDB concurrency + rollback invariants
+        run: |
+          php tests/integration/managed_zc_mariadb.php suite
