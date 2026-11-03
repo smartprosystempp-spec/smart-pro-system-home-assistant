@@ -49,4 +49,4 @@ jobs:
         run: |
           docker run --rm --entrypoint python3 \
             smart-pro-managed-support:zero-copy-smoke \
-            -c 'import nacl; import managed_zero_copy_receiver'
+            -c 'import sys; sys.path.insert(0, "/opt/smart-pro"); import nacl; import managed_zero_copy_receiver'
