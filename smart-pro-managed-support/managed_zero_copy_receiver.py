@@ -19,6 +19,7 @@ KEY_CONTRACT = "smart-pro-managed-zero-copy-receiver-key-v1"
 ENVELOPE_CONTRACT = "smart-pro-managed-zero-copy-sealed-identity-v1"
 CONTENT_CONTRACT = "smart-pro-managed-zero-copy-identity-content-v1"
 LOCAL_OFFER_CONTRACT = "smart-pro-managed-zero-copy-local-offer-v1"
+PRIVATE_CONTEXT_CONTRACT = "smart-pro-managed-zero-copy-private-delivery-context-v1"
 PRIVATE_KEY = Path("/data/managed-zero-copy-receiver-key.json")
 IID_RE = re.compile(r"^ID-[0-9]{5}$")
 REF_RE = re.compile(r"^SPMZ-[A-F0-9]{32}$")
@@ -73,7 +74,7 @@ def prepare_receiver(offer, installation_id, *, key_path=PRIVATE_KEY, now=None):
                 "request_ref": offer["request_ref"],
                 "private_key_hex": bytes(key).hex(),
                 "public_key_hex": bytes(key.public_key).hex(),
-                "created_at": now}
+                "created_at": now, "offer_expires_at": offer["expires_at"]}
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -92,6 +93,7 @@ def prepare_receiver(offer, installation_id, *, key_path=PRIVATE_KEY, now=None):
     if (not data or data.get("contract") != KEY_CONTRACT
             or data.get("installation_id") != iid
             or data.get("request_ref") != offer["request_ref"]
+            or data.get("offer_expires_at") != offer["expires_at"]
             or not isinstance(data.get("private_key_hex"), str)
             or not HEX64_RE.fullmatch(data["private_key_hex"])
             or not isinstance(data.get("public_key_hex"), str)
@@ -110,12 +112,84 @@ def prepare_receiver(offer, installation_id, *, key_path=PRIVATE_KEY, now=None):
             "identity_created": False}
 
 
+
+def _delivery_context_ok(context, iid, now):
+    """Private bounded *context*, never a grant. Broker remains authoritative."""
+    if _offer_ok(context, iid, now):
+        return True
+    if (not isinstance(context, dict)
+            or context.get("contract") != PRIVATE_CONTEXT_CONTRACT
+            or context.get("installation_id") != iid
+            or not isinstance(context.get("request_ref"), str)
+            or REF_RE.fullmatch(context["request_ref"]) is None
+            or context.get("status") != "delivery_recovery"
+            or context.get("read_only") is not True
+            or context.get("claim_authorized") is not False
+            or context.get("identity_created") is not False
+            or context.get("runtime_authorized") is not False
+            or context.get("technician_access_granted") is not False
+            or context.get("not_a_bearer_grant") is not True
+            or type(context.get("expires_at")) is not int):
+        return False
+    return now < context["expires_at"] <= now + MAX_TTL
+
+
+def private_delivery_context(installation_id, request_ref, *,
+                             key_path=PRIVATE_KEY, now=None):
+    """Recover the approved request binding after Tools clears its pending offer.
+
+    The private receiver record may be read only until the ORIGINAL offer expiry.
+    It is not an approval, token, signature, API permission or identity.
+    """
+    now = int(time.time() if now is None else now)
+    iid = str(installation_id or "").strip().upper()
+    if (not IID_RE.fullmatch(iid)
+            or not isinstance(request_ref, str)
+            or REF_RE.fullmatch(request_ref) is None):
+        return None
+    data = _read_private(Path(key_path))
+    if (not data or data.get("contract") != KEY_CONTRACT
+            or data.get("installation_id") != iid
+            or data.get("request_ref") != request_ref):
+        return None
+    created, expires = data.get("created_at"), data.get("offer_expires_at")
+    if (type(created) is not int or type(expires) is not int
+            or created <= 0 or created > now + 30
+            or not created < expires <= created + MAX_TTL
+            or expires <= now):
+        return None
+    secret, public = data.get("private_key_hex"), data.get("public_key_hex")
+    if (not isinstance(secret, str) or not HEX64_RE.fullmatch(secret)
+            or not isinstance(public, str) or not HEX64_RE.fullmatch(public)):
+        return None
+    try:
+        key = PrivateKey(bytes.fromhex(secret))
+        if bytes(key.public_key).hex() != public:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return {
+        "contract": PRIVATE_CONTEXT_CONTRACT,
+        "installation_id": iid,
+        "request_ref": request_ref,
+        "status": "delivery_recovery",
+        "expires_at": expires,
+        "receiver_public_key_hex": public,
+        "not_a_bearer_grant": True,
+        "read_only": True,
+        "claim_authorized": False,
+        "identity_created": False,
+        "runtime_authorized": False,
+        "technician_access_granted": False,
+    }
+
+
 def open_candidate_envelope(envelope, offer, installation_id, architecture,
                             *, key_path=PRIVATE_KEY, now=None):
     """Decrypt a candidate in-memory, WITHOUT saving or authorizing it."""
     now = int(time.time() if now is None else now)
     iid = str(installation_id or "").strip().upper()
-    if not IID_RE.fullmatch(iid) or not _offer_ok(offer, iid, now):
+    if not IID_RE.fullmatch(iid) or not _delivery_context_ok(offer, iid, now):
         return None
     if architecture not in ("amd64", "aarch64") or not isinstance(envelope, dict):
         return None
