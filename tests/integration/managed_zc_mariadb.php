@@ -165,7 +165,7 @@ function create_envelope(int $now, string $node, string $secret): string {
  * conflict COUNTs -> INSERT node -> UPDATE exact locked ledger -> COMMIT.
  * This function deliberately does not imitate Portal proof or WordPress APIs.
  */
-function issue_once(mysqli $db, bool $fail_after_node=false): string {
+function issue_once(mysqli $db, string $fault=''): string {
     if (!engine_is_innodb($db)) {
         return 'storage_not_transactional';
     }
@@ -203,7 +203,11 @@ function issue_once(mysqli $db, bool $fail_after_node=false): string {
         $insert->bind_param('ssssss', $node, $hash, $iid, $stamp, $stamp, $stamp);
         $insert->execute();
         $insert->close();
-        if ($fail_after_node) {
+        if ($fault === 'crash_after_insert') {
+            // Simulate a killed PHP worker while its InnoDB transaction is open.
+            exit(87);
+        }
+        if ($fault === 'throw_after_insert') {
             throw new RuntimeException('synthetic_interruption_after_insert');
         }
         $original = create_envelope($now, $node, $secret);
@@ -266,7 +270,12 @@ function finish(array $job): array {
 
 $mode = $argv[1] ?? 'suite';
 if ($mode === 'worker') {
-    try { echo issue_once(db(), in_array('--fail', $argv, true))."\n"; }
+    try {
+        $fault = in_array('--crash', $argv, true)
+            ? 'crash_after_insert'
+            : (in_array('--fail', $argv, true) ? 'throw_after_insert' : '');
+        echo issue_once(db(), $fault)."\n";
+    }
     catch (Throwable $e) { echo "unexpected_failure\n"; exit(2); }
     exit;
 }
@@ -311,6 +320,24 @@ try {
         'synthetic interruption after INSERT invokes rollback');
     assert_true(node_count($db)===0 && ledger_row($db)['status']==='claim_locked',
         'rollback removes node and leaves the original locked request unchanged');
+
+    // Abrupt process termination closes the DB connection mid-transaction.
+    reset_schema($db);
+    $crash = proc_open([PHP_BINARY, __FILE__, 'worker', '--crash'],
+        [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']], $pipes);
+    fclose($pipes[0]);
+    stream_get_contents($pipes[1]);
+    $crashErr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]);
+    $exitCode = proc_close($crash);
+    assert_true($exitCode===87 && $crashErr==='',
+        'PHP worker terminated abruptly while SQL transaction was uncommitted');
+    assert_true(node_count($db)===0 && ledger_row($db)['status']==='claim_locked',
+        'MariaDB rolls back uncommitted node after connection loss');
+    [$code,$result] = finish(spawn('worker'));
+    assert_true($code===0 && $result==='issued_sealed' &&
+                node_count($db)===1,
+        'new connection can safely issue once after the crashed worker');
 
     // A REAL database trigger raises a SQL error after node INSERT.
     $db->query("CREATE TRIGGER zcqa_refuse_ledger_update
