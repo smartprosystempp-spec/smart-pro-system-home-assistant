@@ -15,6 +15,7 @@ COPY run.sh /run.sh
 COPY app.py /opt/smart-pro/app.py
 COPY managed_zero_copy_receiver.py /opt/smart-pro/managed_zero_copy_receiver.py
 COPY managed_zero_copy_public_endpoint.py /opt/smart-pro/managed_zero_copy_public_endpoint.py
+COPY managed_zero_copy_delivery.py /opt/smart-pro/managed_zero_copy_delivery.py
 RUN chmod 0755 /run.sh /opt/smart-pro/app.py
 
 ENV SMART_PRO_MANAGED_VERSION="${BUILD_VERSION}" \
