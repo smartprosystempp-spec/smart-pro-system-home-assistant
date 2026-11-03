@@ -28,6 +28,7 @@ import ipaddress
 import math
 from pathlib import Path
 from managed_zero_copy_offer import consume_heartbeat_offer
+from managed_zero_copy_device_proof import build_proof_payload, accept_challenge_response
 
 PORT = 8099
 OFFLINE_DEVICES = {}
@@ -4296,14 +4297,48 @@ def _portal_maybe_run_fresh_diagnostic_check(response, token):
     return portal_api_request('heartbeat', _portal_heartbeat_payload(fresh_ha, ack), token=token)
 
 
+def _zc1_device_proof_payload(connection):
+    """Build an Ed25519 proof only after a previously authenticated passive offer."""
+    try:
+        from managed_zero_copy_offer import DEFAULT_PATH
+        info = DEFAULT_PATH.stat()
+        if info.st_size <= 0 or info.st_size > 2048:
+            return None
+        offer = json.loads(DEFAULT_PATH.read_text(encoding='utf-8'))
+        return build_proof_payload(offer, connection.get('installation_id', ''))
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return None
+
+
+def _zc1_accept_passive_offer_and_challenge(response, connection):
+    """No identity creation, no claim, no runtime authority."""
+    iid = str(connection.get('installation_id', '') or '')
+    consume_heartbeat_offer(response, iid)
+    try:
+        from managed_zero_copy_offer import DEFAULT_PATH
+        info = DEFAULT_PATH.stat()
+        if info.st_size <= 0 or info.st_size > 2048:
+            return
+        offer = json.loads(DEFAULT_PATH.read_text(encoding='utf-8'))
+        accept_challenge_response(response, offer, iid)
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return
+
+
 def send_portal_heartbeat():
     connection = load_portal_connection()
     token = str(connection.get('installation_token', '')).strip()
     if not token:
         return False
     try:
-        response = portal_api_request('heartbeat', _portal_heartbeat_payload(), token=token)
+        heartbeat_payload = _portal_heartbeat_payload()
+        zc_proof = _zc1_device_proof_payload(connection)
+        if isinstance(zc_proof, dict):
+            heartbeat_payload['managed_zero_copy_device'] = zc_proof
+        response = portal_api_request('heartbeat', heartbeat_payload, token=token)
+        _zc1_accept_passive_offer_and_challenge(response, connection)
         response = _portal_maybe_run_fresh_diagnostic_check(response, token)
+        _zc1_accept_passive_offer_and_challenge(response, connection)
         managed_changed = _portal_maybe_process_managed_backup(response)
         external_portal_state = _portal_maybe_process_external_access(response)
         control_changed = _portal_maybe_process_control_plane(response)
@@ -4312,7 +4347,12 @@ def send_portal_heartbeat():
             # local-job results and Control Plane acknowledgements without waiting
             # for the next 30-second cycle. The second heartbeat never creates a
             # second local backup because Managed Backup job execution is idempotent.
-            response = portal_api_request('heartbeat', _portal_heartbeat_payload(), token=token)
+            second_payload = _portal_heartbeat_payload()
+            zc_proof = _zc1_device_proof_payload(connection)
+            if isinstance(zc_proof, dict):
+                second_payload['managed_zero_copy_device'] = zc_proof
+            response = portal_api_request('heartbeat', second_payload, token=token)
+            _zc1_accept_passive_offer_and_challenge(response, connection)
             _portal_maybe_process_managed_backup(response)
             refreshed_external_state = _portal_maybe_process_external_access(response)
             if isinstance(refreshed_external_state, dict):
@@ -4323,7 +4363,6 @@ def send_portal_heartbeat():
         connection['last_error'] = ''
         # Passive offer delivered only by the already token-authenticated Portal heartbeat.
         # It is non-authorizing metadata; never triggers Managed identity creation.
-        consume_heartbeat_offer(response, connection.get('installation_id', ''))
         if response.get('installation_id'):
             connection['installation_id'] = str(response['installation_id'])
         connection['open_request_count'] = int(response.get('open_request_count', connection.get('open_request_count', 0)) or 0)
