@@ -1,3 +1,15 @@
+## 3.19.8 — Assisted Local Identity Evidence (READ ONLY, 2026-11-04)
+
+- Exact ID-56674 / amd64 local integrity inspector for protected first-seed latch,
+  verified 3.19.7 report, safe `meshagent.db` integrity, target group provenance,
+  fresh local and server authorization and paused unattended state.
+- No new MeshAgent start, settings ticket, Broker proof, runtime, binding write or service.
+- First seed, canary and unattended activation are hard-blocked on this exact version/scope.
+- This is **not** an independently attested native MeshCentral node ID proof.
+- Requires paired Broker 0.60.44 to preserve read-only Portal preflight compatibility
+  and explicitly disallow shared `.msh` fallback for 3.19.8.
+- All existing 3.19.6 installations, Guest and Portal unchanged.
+
 ## 3.19.7 — Assisted First MeshAgent Identity, target-only (2026-11-04)
 
 - General, exact-installation first-seed pilot using a fresh Broker 0.60.41 per-installation source; strict canonical MeshName, no shared fallback.

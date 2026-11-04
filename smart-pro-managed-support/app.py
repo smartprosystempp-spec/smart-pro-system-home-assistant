@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.7")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.8")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -3263,6 +3263,103 @@ def assisted_first_seed_scope(identity=None):
             and installation not in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION))
 
 
+# 3.19.8 — local-only reuse evidence; NOT a MeshCentral identity attestation.
+ASSISTED_LOCAL_EVIDENCE_VERSION = '3.19.8'
+ASSISTED_LOCAL_EVIDENCE_INSTALLATION = 'ID-56674'
+
+
+def assisted_local_version():
+    return re.fullmatch(r'3\.19\.8(?:[-+][A-Za-z0-9._-]+)?', VERSION) is not None
+
+
+def _assisted_evidence_json(path, limit):
+    """Read only regular owned files, without symlink traversal or writes."""
+    fd = None
+    try:
+        fd, size = _open_regular_nofollow(path, limit)
+        if size <= 0: return None
+        parts=[]; total=0
+        while True:
+            part=os.read(fd, min(8192, limit + 1 - total))
+            if not part: break
+            total += len(part)
+            if total > limit: return None
+            parts.append(part)
+        data=json.loads(b''.join(parts).decode('utf-8'))
+        return data if isinstance(data, dict) else None
+    except (OSError, RuntimeError, UnicodeError, json.JSONDecodeError, ValueError):
+        return None
+    finally:
+        if fd is not None: os.close(fd)
+
+
+def assisted_local_reuse_evidence(identity=None):
+    """Local file + Broker-authorized state check. NEVER executes, binds or calls Broker.
+
+    The protected meshagent.db is measured and checked against its own persisted
+    metadata and the original 3.19.7 first-seed receipt. This proves only LOCAL
+    continuity of stored evidence, NOT native MeshCentral node ID ownership.
+    """
+    identity = identity if identity is not None else load_identity()
+    scoped = bool(identity and assisted_local_version()
+                  and ARCH == 'amd64' and identity.get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION)
+    checks = {'exact_scope': scoped}
+    result = {'stage': 'NOT_IN_SCOPE', 'checks': checks, 'binding_authorized': False,
+              'remote_agent_executed': False, 'broker_attested': False,
+              'meshcentral_native_node_verified': False, 'first_seed_replayed': False}
+    if not scoped:
+        return result
+    install, node = identity['installation_id'], identity['node_id']
+    local = read_policy()
+    policy = local.get('policy') if isinstance(local.get('policy'), dict) else {}
+    checks['local_policy_exact'] = (local.get('allowed_local') is True
+                                    and _safe_str(policy.get('installation_id'), 100).upper() == install)
+    server = get_server_state()
+    checks['fresh_broker_authorization'] = (server.get('authorized_server') is True
+        and (_as_int(server.get('valid_until')) or 0) > now_ts()
+        and _safe_str(server.get('installation_id'),100).upper() == install
+        and _safe_str(server.get('node_id'),64).upper() == node)
+    latch = _assisted_evidence_json(FIRST_SEED_ATTEMPT_FILE, 2048)
+    checks['one_shot_seed_latched'] = bool(latch and latch.get('installation_id') == install
+        and latch.get('node_id') == node and latch.get('architecture') == ARCH
+        and latch.get('scope') == 'single_explicit_first_seed'
+        and latch.get('technician_actions_authorized') is False
+        and latch.get('unattended_enabled') is False)
+    report = _assisted_evidence_json(CANARY_STATE_FILE, 16384)
+    checks['seed_receipt_verified'] = bool(report
+        and report.get('installation_id') == install and report.get('node_id') == node
+        and report.get('client_version') == '3.19.7' and report.get('architecture') == ARCH
+        and report.get('status') == 'reported' and report.get('verified') is True
+        and report.get('result_code') == 'runtime_limit' and report.get('identity_mode') == 'seed'
+        and report.get('identity_db_persisted') is True and report.get('identity_binding_verified') is True
+        and report.get('runtime_directory_deleted') is True
+        and report.get('technician_actions_authorized') is False
+        and (_as_int(report.get('identity_generation')) or 0) == 1
+        and (_as_int(report.get('identity_continuity_runs')) or 0) == 1
+        and 0 < (_as_int(report.get('started_at')) or 0) <= (_as_int(report.get('ended_at')) or 0))
+    state={}
+    try: state=_validate_persisted_mesh_identity(identity, None)
+    except RuntimeError: state={}
+    checks['identity_db_integrity'] = state.get('state') == 'ready'
+    checks['stable_target_provenance'] = (checks['identity_db_integrity']
+        and state.get('generation') == 1 and state.get('continuity_runs') == 1
+        and state.get('runtime_source') == 'target'
+        and state.get('target_group_name') == f'Smart Pro Managed — {install}'
+        and bool(report) and state.get('agent_label') == report.get('agent_label')
+        and state.get('db_sha256','')[:12] == report.get('identity_db_sha256_hint'))
+    checks['unattended_paused'] = load_unattended_control().get('enabled') is not True
+    checks['runtime_inactive'] = not any((CANARY_WORKER_ACTIVE, PERSISTENT_WORKER_ACTIVE,
+        RUNTIME_WORKER_ACTIVE, FIRST_DEVICE_EXECUTION_WORKER_ACTIVE,
+        MIGRATION_CANARY_WORKER_ACTIVE, IDENTITY_RESEED_WORKER_ACTIVE,
+        CANDIDATE_RECONNECT_WORKER_ACTIVE, PROMOTION_WORKER_ACTIVE))
+    result['stage'] = 'LOCAL_REUSE_EVIDENCE_READY' if all(checks.values()) else 'BLOCKED_LOCAL_REUSE_CHECKS'
+    result['expected_agent_label'] = _safe_str(state.get('agent_label'),40) if state else ''
+    result['generation'] = state.get('generation',0)
+    result['continuity_runs'] = state.get('continuity_runs',0)
+    result['db_integrity_hint'] = _safe_str(state.get('db_sha256'),12)[:12] if state else ''
+    return result
+
+
 def first_seed_pilot_readiness():
     """Read-only, fail-closed guard for one explicit lab identity seed; no remote calls."""
     assisted_first = assisted_first_seed_scope()
@@ -3961,6 +4058,8 @@ def persistent_runtime_worker():
 
 def start_persistent_runtime():
     global PERSISTENT_WORKER_ACTIVE
+    if assisted_local_version() and (load_identity() or {}).get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION:
+        raise RuntimeError('assisted_local_evidence_runtime_locked|Το 3.19.8 επιτρέπει μόνο τοπικό read-only έλεγχο. Το unattended runtime παραμένει κλειδωμένο.')
     with PERSISTENT_WORKER_LOCK:
         if PROCESS_SHUTDOWN.is_set():
             raise RuntimeError('managed_shutdown_in_progress|Το πρόσθετο τερματίζεται.')
@@ -5999,7 +6098,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
         cid_binding = 'Ναι' if canary_current and canary_state.get('identity_binding_verified') else ('Θα δημιουργηθεί' if canary_current and cid_mode == 'seed' else '—')
         cid_generation = str(canary_state.get('identity_generation') or 0) if canary_current else '—'
         cid_runs = str(canary_state.get('identity_continuity_runs') or 0) if canary_current else '—'
-        canary_disabled = ' disabled' if (not overall or CANARY_WORKER_ACTIVE or PERSISTENT_WORKER_ACTIVE) else ''
+        canary_disabled = ' disabled' if (not overall or CANARY_WORKER_ACTIVE or PERSISTENT_WORKER_ACTIVE or (assisted_local_version() and identity.get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION)) else ''
         canary_html = f"""
 <section class="pairbox">
 <h2>MeshAgent identity continuity canary</h2>
@@ -6055,6 +6154,26 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 <button type="submit"{seed_disabled}>Έναρξη πρώτης δημιουργίας identity (≤45″)</button>
 </form></section>'''
 
+    local_evidence_html = ''
+    if identity is not None and assisted_local_version() and identity.get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION:
+        evidence = assisted_local_reuse_evidence(identity)
+        evidence_checks = ''.join('<div><span>' + esc(k.replace('_',' ')) + '</span><strong>'
+            + ('PASS' if value else 'BLOCKED') + '</strong></div>' for k,value in evidence['checks'].items())
+        local_evidence_html = f"""<section class="pairbox operational-card">
+<div class="section-heading"><div><div class="eyebrow">READ ONLY · 3.19.8</div><h2>Ακεραιότητα σταθερής MeshAgent identity · {esc(ASSISTED_LOCAL_EVIDENCE_INSTALLATION)}</h2></div></div>
+<p>Ο έλεγχος διαβάζει αποκλειστικά τα ήδη αποθηκευμένα τοπικά στοιχεία του 3.19.7 First Seed. Δεν γίνεται εκτέλεση MeshAgent, αποστολή κλειδιών, πρόσβαση τεχνικού ή εγγραφή binding.</p>
+<div class="tool-lock">ΔΕΝ αποτελεί ανεξάρτητη απόδειξη του πραγματικού MeshCentral Node ID. Ο Broker πρέπει να επαληθεύσει ξεχωριστά την επανασύνδεση της ίδιας συσκευής.</div>
+<div class="mini-grid"><div><span>Local evidence</span><strong>{esc(evidence['stage'])}</strong></div>
+<div><span>Expected node label</span><strong>{esc(evidence.get('expected_agent_label') or '—')}</strong></div>
+<div><span>Identity generation / runs</span><strong>{esc(evidence.get('generation',0))} / {esc(evidence.get('continuity_runs',0))}</strong></div>
+<div><span>Local DB integrity hint</span><strong>{esc(evidence.get('db_integrity_hint') or '—')}</strong></div>
+{evidence_checks}
+<div><span>Broker native Node ID proof</span><strong>NOT ATTESTED</strong></div>
+<div><span>Binding write</span><strong>OFF</strong></div>
+<div><span>MeshAgent / unattended runtime</span><strong>OFF</strong></div></div>
+<p>Επόμενο checkpoint: ξεχωριστή περιορισμένη reuse-only εκτέλεση με live Broker/MeshCentral επιβεβαίωση. Καμία ενέργεια δεν εκτελείται από αυτή την κάρτα.</p>
+</section>"""
+
     if identity is not None:
         unattended = load_unattended_control()
         unattended_enabled = unattended.get('enabled') is True
@@ -6097,7 +6216,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
                               and first_seed_report.get('identity_db_persisted') is True
                               and first_seed_report.get('runtime_directory_deleted') is True)
         unattended_text = 'ΕΝΕΡΓΗ — επανασυνδέεται αυτόματα μετά από επανεκκίνηση του πρόσθετου' if unattended_enabled else 'ΣΕ ΠΑΥΣΗ — απαιτείται ρητή ενεργοποίηση'
-        pstart_disabled = ' disabled' if (not overall or not identity_ready or unattended_enabled or PERSISTENT_WORKER_ACTIVE or CANARY_WORKER_ACTIVE) else ''
+        pstart_disabled = ' disabled' if (not overall or not identity_ready or unattended_enabled or PERSISTENT_WORKER_ACTIVE or CANARY_WORKER_ACTIVE or (assisted_local_version() and identity['installation_id'] == ASSISTED_LOCAL_EVIDENCE_INSTALLATION)) else ''
         pstop_disabled = '' if (unattended_enabled or PERSISTENT_WORKER_ACTIVE) else ' disabled'
         persistent_html = f"""
 <section class="pairbox">
@@ -6683,6 +6802,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 {current_state_html}
 {pair_html}
 {first_seed_html}
+{local_evidence_html}
 {persistent_html.replace('class="pairbox"', 'class="pairbox operational-card"', 1) if persistent_html else ''}
 {diagnostics_section}
 {identity_section}
@@ -6865,7 +6985,7 @@ def stop_router_compatibility():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SmartProManaged/3.19.7"
+    server_version = "SmartProManaged/3.19.8"
 
     def _send(self, code, body, content_type):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -6990,6 +7110,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if PERSISTENT_WORKER_ACTIVE and not (is_persistent_stop or is_group_migration_preflight or is_group_migration_target_settings or is_group_migration_canary or is_group_identity_reseed_canary or is_candidate_reconnect_canary or is_candidate_promotion):
             self._send(409, render_page(read_policy(), "Η continuous Managed λειτουργία είναι ενεργή. Επιτρέπονται μόνο ασφαλής τερματισμός ή οι verification-only migration έλεγχοι.", "bad"), "text/html; charset=utf-8")
+            return
+        if assisted_local_version() and (load_identity() or {}).get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION and (is_first_seed or is_canary or is_persistent_start):
+            self._send(409, render_page(read_policy(), '3.19.8: First Seed, continuity canary και unattended runtime παραμένουν κλειδωμένα. Μόνο read-only evidence.', 'bad'), 'text/html; charset=utf-8')
             return
         if is_first_seed:
             if (form.get('confirm_first_seed') or [''])[0] != (load_identity() or {}).get('installation_id'):
@@ -7287,7 +7410,7 @@ if __name__ == "__main__":
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
         if STABLE_POST_ACTIONS_ONLY:
-            print("[managed] 3.19.7 stable action gate: start/stop, initial pairing and explicitly scoped one-shot first-seed pilots only; archived actions locked", flush=True)
+            print("[managed] stable action gate: 3.19.8 local evidence is read-only, remote start locked for ID-56674; archived actions locked", flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
     router_compat_started = False
