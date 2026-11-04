@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 
-ARG BUILD_VERSION="3.19.4"
+ARG BUILD_VERSION="3.19.5"
 ARG BUILD_ARCH
 
 RUN apt-get update \

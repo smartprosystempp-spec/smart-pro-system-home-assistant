@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.4")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.5")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -68,6 +68,7 @@ FIRST_DEVICE_RETRY_RESET_STATE_FILE = DATA_DIR / "first-device-retry-reset.json"
 AGENT_STATE_FILE = DATA_DIR / "agent-binary-verification.json"
 RUNTIME_STATE_FILE = DATA_DIR / "runtime-lease-dry-run.json"
 CANARY_STATE_FILE = DATA_DIR / "identity-continuity-canary.json"
+FIRST_SEED_ATTEMPT_FILE = DATA_DIR / "first-meshagent-seed-attempt-v1.json"
 PERSISTENT_STATE_FILE = DATA_DIR / "continuous-runtime-state.json"
 UNATTENDED_CONTROL_FILE = DATA_DIR / "unattended-runtime-control.json"
 GROUP_MIGRATION_PREFLIGHT_FILE = DATA_DIR / "group-migration-preflight.json"
@@ -127,11 +128,15 @@ FIRST_DEVICE_MESH_HINT_RE = re.compile(r"^[a-f0-9]{16}$")
 FIRST_DEVICE_INSTALLATION = "ID-34973"
 FIRST_DEVICE_GROUP = "Smart Pro Managed — ID-34973"
 FIRST_DEVICE_EXECUTION_VERSION = "3.17.4"
-CONTINUOUS_LIFECYCLE_VERSION = "3.19.4"
+CONTINUOUS_LIFECYCLE_VERSION = "3.19.5"
 # Stable production surface: archived actions stay locked regardless of version.
 STABLE_POST_ACTIONS_ONLY = True
 # Narrow recovery of one-time initial pairing only; not a legacy action unlock.
 ASSISTED_INITIAL_PAIRING_ENABLED = True
+# Lab-only: explicit, non-repeatable first MeshAgent identity seeding, no auto runtime.
+FIRST_SEED_PILOT_ENABLED = True
+FIRST_SEED_PILOT_INSTALLATION = "ID-28422"
+FIRST_SEED_PILOT_ARCH = "amd64"
 FIRST_DEVICE_EXECUTION_MAX_RUNTIME = 75
 FIRST_DEVICE_EXECUTION_SHUTDOWN_GRACE = 3
 MIN_AGENT_BYTES = 100000
@@ -3213,6 +3218,68 @@ def start_connectivity_canary():
     t=threading.Thread(target=connectivity_canary_worker,name='managed-identity-continuity-canary',daemon=True); t.start()
 
 
+def first_seed_pilot_readiness():
+    """Read-only, fail-closed guard for one explicit lab identity seed; no remote calls."""
+    if not FIRST_SEED_PILOT_ENABLED:
+        return False, "Το πιλοτικό πρώτο enrollment δεν είναι ενεργό."
+    if ARCH != FIRST_SEED_PILOT_ARCH:
+        return False, "Το πιλοτικό enrollment επιτρέπεται μόνο σε amd64."
+    identity = load_identity()
+    if not identity or identity.get('installation_id') != FIRST_SEED_PILOT_INSTALLATION:
+        return False, "Το πιλοτικό enrollment αφορά αποκλειστικά την ID-28422."
+    local = read_policy()
+    policy = local.get('policy') if isinstance(local.get('policy'),dict) else {}
+    if not local.get('allowed_local') or _safe_str(policy.get('installation_id'),100).upper() != FIRST_SEED_PILOT_INSTALLATION:
+        return False, "Η τοπική πολιτική ή η εγκατάσταση δεν επιτρέπει enrollment."
+    server = get_server_state()
+    if (server.get('authorized_server') is not True
+            or (_as_int(server.get('valid_until')) or 0) <= now_ts()
+            or _safe_str(server.get('installation_id'),100).upper() != FIRST_SEED_PILOT_INSTALLATION
+            or _safe_str(server.get('node_id'),64).upper() != identity.get('node_id')):
+        return False, "Δεν υπάρχει πρόσφατη και ακριβώς δεμένη εξουσιοδότηση Broker."
+    if get_mesh_identity_status(identity).get('state') != 'not_seeded':
+        return False, "Η σταθερή MeshAgent identity δεν είναι στην ασφαλή κατάσταση πρώτης δημιουργίας."
+    if FIRST_SEED_ATTEMPT_FILE.exists() or CANARY_STATE_FILE.exists():
+        return False, "Υπάρχει ήδη καταγεγραμμένη προσπάθεια. Δεν επιτρέπεται αυτόματη επανάληψη."
+    if load_unattended_control().get('enabled') is True:
+        return False, "Η αυτόματη Managed σύνδεση πρέπει να παραμένει σε παύση."
+    if (PROCESS_SHUTDOWN.is_set() or CANARY_WORKER_ACTIVE or PERSISTENT_WORKER_ACTIVE
+            or FIRST_DEVICE_EXECUTION_WORKER_ACTIVE or MIGRATION_CANARY_WORKER_ACTIVE
+            or IDENTITY_RESEED_WORKER_ACTIVE or CANDIDATE_RECONNECT_WORKER_ACTIVE
+            or PROMOTION_WORKER_ACTIVE):
+        return False, "Υπάρχει ενεργή ή υπό τερματισμό Managed εργασία."
+    return True, "Οι έλεγχοι της πρώτης δημιουργίας πέρασαν."
+
+
+def request_first_seed_pilot():
+    """One-shot local approval; existing Broker-authorized canary is the sole executor."""
+    ok, reason = first_seed_pilot_readiness()
+    if not ok:
+        raise RuntimeError('first_seed_denied|' + reason)
+    identity = load_identity()
+    DATA_DIR.mkdir(parents=True,exist_ok=True)
+    # Atomic persistent latch survives restarts and even partially failed attempts.
+    # Never remove it automatically; failed attempts require separate human review.
+    record = {'installation_id':identity['installation_id'],
+              'node_id':identity['node_id'],'architecture':ARCH,
+              'requested_at':now_ts(),'scope':'single_explicit_first_seed',
+              'technician_actions_authorized':False,'unattended_enabled':False}
+    try:
+        fd = os.open(FIRST_SEED_ATTEMPT_FILE,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    except FileExistsError:
+        raise RuntimeError('first_seed_already_attempted|Η πρώτη ενεργοποίηση ζητήθηκε ήδη· δεν γίνεται δεύτερη εκτέλεση.') from None
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8') as handle:
+            handle.write(json.dumps(record,ensure_ascii=False,separators=(',',':')))
+            handle.flush();os.fsync(handle.fileno())
+        os.chmod(FIRST_SEED_ATTEMPT_FILE,0o600)
+    except OSError as exc:
+        raise RuntimeError('first_seed_latch_write_failed|Η μόνιμη καταγραφή δεν ολοκληρώθηκε· ελέγξτε τοπικά πριν από νέα ενέργεια.') from exc
+    # Do NOT enable unattended mode here. The original ≤45s, Broker-leased,
+    # foreground-only canary handles settings, agent verification and persistence.
+    start_connectivity_canary()
+
+
 def load_persistent_state():
     try:
         if not PERSISTENT_STATE_FILE.exists():
@@ -3844,6 +3911,15 @@ def start_persistent_runtime():
         status = get_mesh_identity_status(identity)
         if status.get('state') != 'ready':
             raise RuntimeError('persistent_identity_not_ready|Η σταθερή MeshCentral identity δεν είναι READY. Δεν θα δημιουργηθεί νέο node από την 3.9.0.')
+        if identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and FIRST_SEED_ATTEMPT_FILE.exists():
+            first_seed_report = load_canary_state()
+            if not (first_seed_report.get('status') == 'reported'
+                    and first_seed_report.get('verified') is True
+                    and first_seed_report.get('result_code') == 'runtime_limit'
+                    and first_seed_report.get('identity_mode') == 'seed'
+                    and first_seed_report.get('identity_db_persisted') is True
+                    and first_seed_report.get('runtime_directory_deleted') is True):
+                raise RuntimeError('first_seed_report_not_verified|Η πρώτη MeshAgent identity δεν έχει ολοκληρώσει verified report και cleanup.')
         PERSISTENT_STOP_EVENT.clear()
         PERSISTENT_WORKER_ACTIVE = True
     thread = threading.Thread(target=persistent_runtime_worker, name='managed-continuous-runtime', daemon=True)
@@ -5898,6 +5974,23 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
     unattended_enabled = False
     unattended_text = "DISABLED"
 
+    first_seed_html = ""
+    if identity is not None and identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and ARCH == FIRST_SEED_PILOT_ARCH:
+        ready, seed_reason = first_seed_pilot_readiness()
+        seeded_state = get_mesh_identity_status(identity).get('state')
+        attempt_label = 'Αναμονή ρητής εκτέλεσης' if ready else ('MeshAgent identity READY — δεν επιτρέπεται νέα δημιουργία' if seeded_state == 'ready' else seed_reason)
+        seed_disabled = '' if ready else ' disabled'
+        first_seed_html = f'''<section class="pairbox operational-card">
+<h2>Πρώτη δημιουργία MeshAgent identity · ID-28422</h2>
+<p>Μόνο ελεγχόμενο αρχικό enrollment. Μία σύντομη foreground εκτέλεση έως 45 δευτερόλεπτα, με ρητή άδεια Broker, χωρίς μόνιμη σύνδεση, χωρίς εγκατάσταση service και χωρίς δικαιώματα τεχνικού.</p>
+<div class="tool-lock">Δεν εκτελείται αυτόματα. Η ενέργεια επιτρέπεται μία φορά και δεν επαναλαμβάνεται αυτόματα ακόμη και αν αποτύχει.</div>
+<div class="mini-grid"><div><span>Έλεγχος</span><strong>{esc(attempt_label)}</strong></div><div><span>Εγκατάσταση</span><strong>ID-28422 · amd64</strong></div><div><span>Automatic Managed</span><strong>OFF έως νέα εντολή</strong></div></div>
+<form method="post" action="first-identity-enrollment">
+<input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
+<label><input type="checkbox" name="confirm_first_seed" value="ID-28422" required{seed_disabled} style="width:auto;max-width:none;margin-right:8px">Επιβεβαιώνω μία μοναδική δοκιμή πρώτης MeshAgent identity για ID-28422 και ότι δεν υπάρχει αυτόματη επανάληψη.</label>
+<button type="submit"{seed_disabled}>Έναρξη πρώτης δημιουργίας identity (≤45″)</button>
+</form></section>'''
+
     if identity is not None:
         unattended = load_unattended_control()
         unattended_enabled = unattended.get('enabled') is True
@@ -5930,6 +6023,15 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
         plabel_node = persistent_state.get('agent_label') if pcurrent else (mesh_identity_status.get('agent_label') or '—')
         pclean = 'Ναι' if pcurrent and persistent_state.get('runtime_directory_deleted') else ('Όχι — runtime ενεργό' if PERSISTENT_WORKER_ACTIVE else '—')
         identity_ready = mesh_identity_status.get('state') == 'ready'
+        if identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and FIRST_SEED_ATTEMPT_FILE.exists():
+            # Broker report and local persistence/cleanup must agree before start is offered.
+            first_seed_report = load_canary_state()
+            identity_ready = (identity_ready and first_seed_report.get('status') == 'reported'
+                              and first_seed_report.get('verified') is True
+                              and first_seed_report.get('result_code') == 'runtime_limit'
+                              and first_seed_report.get('identity_mode') == 'seed'
+                              and first_seed_report.get('identity_db_persisted') is True
+                              and first_seed_report.get('runtime_directory_deleted') is True)
         unattended_text = 'ΕΝΕΡΓΗ — επανασυνδέεται αυτόματα μετά από επανεκκίνηση του πρόσθετου' if unattended_enabled else 'ΣΕ ΠΑΥΣΗ — απαιτείται ρητή ενεργοποίηση'
         pstart_disabled = ' disabled' if (not overall or not identity_ready or unattended_enabled or PERSISTENT_WORKER_ACTIVE or CANARY_WORKER_ACTIVE) else ''
         pstop_disabled = '' if (unattended_enabled or PERSISTENT_WORKER_ACTIVE) else ' disabled'
@@ -6516,6 +6618,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 {notice_html}
 {current_state_html}
 {pair_html}
+{first_seed_html}
 {persistent_html.replace('class="pairbox"', 'class="pairbox operational-card"', 1) if persistent_html else ''}
 {diagnostics_section}
 {identity_section}
@@ -6698,7 +6801,7 @@ def stop_router_compatibility():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SmartProManaged/3.19.4"
+    server_version = "SmartProManaged/3.19.5"
 
     def _send(self, code, body, content_type):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -6782,6 +6885,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path.rstrip("/")
         is_pair = path.endswith("/pair") or path == "pair"
+        is_first_seed = path.endswith("/first-identity-enrollment") or path == "first-identity-enrollment"
         is_enrollment = path.endswith("/enrollment-check") or path == "enrollment-check"
         is_settings = path.endswith("/settings-check") or path == "settings-check"
         is_first_device_settings = path.endswith("/first-device-settings-check") or path == "first-device-settings-check"
@@ -6798,7 +6902,7 @@ class Handler(BaseHTTPRequestHandler):
         is_group_identity_reseed_canary = path.endswith("/group-identity-reseed-canary") or path == "group-identity-reseed-canary"
         is_candidate_reconnect_canary = path.endswith("/candidate-reconnect-canary") or path == "candidate-reconnect-canary"
         is_candidate_promotion = path.endswith("/candidate-promotion") or path == "candidate-promotion"
-        if not is_pair and not is_enrollment and not is_settings and not is_first_device_settings and not is_first_device_execution and not is_first_device_retry_reset and not is_agent and not is_runtime and not is_canary and not is_persistent_start and not is_persistent_stop and not is_group_migration_preflight and not is_group_migration_target_settings and not is_group_migration_canary and not is_group_identity_reseed_canary and not is_candidate_reconnect_canary and not is_candidate_promotion:
+        if not is_pair and not is_first_seed and not is_enrollment and not is_settings and not is_first_device_settings and not is_first_device_execution and not is_first_device_retry_reset and not is_agent and not is_runtime and not is_canary and not is_persistent_start and not is_persistent_stop and not is_group_migration_preflight and not is_group_migration_target_settings and not is_group_migration_canary and not is_group_identity_reseed_canary and not is_candidate_reconnect_canary and not is_candidate_promotion:
             self._send(404, "Not found", "text/plain; charset=utf-8")
             return
         length = _as_int(self.headers.get("Content-Length")) or 0
@@ -6817,12 +6921,24 @@ class Handler(BaseHTTPRequestHandler):
         if VERSION == FIRST_DEVICE_EXECUTION_VERSION and not (is_first_device_execution or is_first_device_retry_reset):
             self._send(409, render_page(read_policy(), "Η 3.17.4 είναι κλειδωμένο controlled retry/reset checkpoint. Επιτρέπονται μόνο reset consume και αργότερα explicit armed first-device execution.", "bad"), "text/html; charset=utf-8")
             return
-        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop or (ASSISTED_INITIAL_PAIRING_ENABLED and is_pair)):
+        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop or (ASSISTED_INITIAL_PAIRING_ENABLED and is_pair) or (FIRST_SEED_PILOT_ENABLED and is_first_seed)):
             self._send(409, render_page(read_policy(), "Η stable Managed λειτουργία επιτρέπει μόνο ρητή ενεργοποίηση ή παύση της μόνιμης σύνδεσης. Οι παλιές mutation/test ενέργειες παραμένουν κλειδωμένες, ανεξάρτητα από την έκδοση.", "bad"), "text/html; charset=utf-8")
             return
         if PERSISTENT_WORKER_ACTIVE and not (is_persistent_stop or is_group_migration_preflight or is_group_migration_target_settings or is_group_migration_canary or is_group_identity_reseed_canary or is_candidate_reconnect_canary or is_candidate_promotion):
             self._send(409, render_page(read_policy(), "Η continuous Managed λειτουργία είναι ενεργή. Επιτρέπονται μόνο ασφαλής τερματισμός ή οι verification-only migration έλεγχοι.", "bad"), "text/html; charset=utf-8")
             return
+        if is_first_seed:
+            if (form.get('confirm_first_seed') or [''])[0] != FIRST_SEED_PILOT_INSTALLATION:
+                self._send(409, render_page(read_policy(), "Απαιτείται ρητή επιβεβαίωση της εγκατάστασης ID-28422.", "bad"), "text/html; charset=utf-8")
+                return
+            try:
+                request_first_seed_pilot()
+                self._send(202, render_page(read_policy(), "Ζητήθηκε η μία ελεγχόμενη πρώτη δημιουργία identity. Δεν ενεργοποιήθηκε μόνιμη σύνδεση. Ελέγξτε αποτέλεσμα και σταθερή ταυτότητα πριν από οποιαδήποτε επόμενη ενέργεια.", "info"), "text/html; charset=utf-8")
+            except RuntimeError as exc:
+                message = str(exc).partition('|')[2] or "Η πρώτη δημιουργία identity μπλοκαρίστηκε."
+                self._send(409, render_page(read_policy(), message, "bad"), "text/html; charset=utf-8")
+            return
+
         if is_pair:
             if PERSISTENT_WORKER_ACTIVE:
                 self._send(409, render_page(read_policy(), "Η Managed σύνδεση εκτελείται ήδη. Διακόψτε την πριν από νέα αρχική ενεργοποίηση.", "bad"), "text/html; charset=utf-8")
@@ -7107,7 +7223,7 @@ if __name__ == "__main__":
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
         if STABLE_POST_ACTIONS_ONLY:
-            print("[managed] 3.19.4 stable action gate: start/stop and guarded initial pairing only; archived actions locked", flush=True)
+            print("[managed] 3.19.5 stable action gate: start/stop, initial pairing and ID-28422 one-shot first-seed only; archived actions locked", flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
     router_compat_started = False

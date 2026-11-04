@@ -1,3 +1,12 @@
+## 3.19.5 — ID-28422 First MeshAgent Identity · Manual LAB Pilot
+
+- This small, manual-only pilot requires an existing paired node, exact ID-28422 / amd64, current local policy ALLOWED and fresh matching Broker server authorization.
+- A separate explicit confirmation action reuses the existing authorized <=45-second foreground identity-continuity canary to seed the first MeshAgent identity. No service install, automatic unattended start, or technician Web/Terminal/Files/Desktop rights.
+- An atomic /data one-attempt marker prevents accidental rerun across restarts, including after failed or partial attempts. Never automatically clears or retries.
+- Prior enrollment / migration / diagnostic actions remain locked. Existing ID-34973 and ID-95948 are out of scope; other add-ons and WordPress services are untouched.
+- Persistent runtime start is blocked for this pilot unless the initial seed has a VERIFIED runtime_limit report, identity DB persisted and runtime cleanup complete.
+- Enrollment uses the current Broker managed3 settings source; no per-installation group re-provisioning or Zero-Copy is introduced. Live QA required before considering this successful.
+
 ## 3.19.4 — Assisted initial pairing restoration (source candidate; not published)
 
 - Restore **only** one-time /pair with CSRF, existing-identity denial, runtime-active denial and existing local Managed policy enforcement.
