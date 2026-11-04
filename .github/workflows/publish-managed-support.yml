@@ -42,9 +42,9 @@ jobs:
           context: ./smart-pro-managed-support
           image: ${{ matrix.image }}
           image-tags: |
-            3.19.5
+            3.19.6
           push: "true"
-          version: 3.19.5
+          version: 3.19.6
 
   manifest:
     name: Publish multi-arch manifest
@@ -61,4 +61,4 @@ jobs:
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           image-name: smart-pro-managed-support
           image-tags: |
-            3.19.5
+            3.19.6
