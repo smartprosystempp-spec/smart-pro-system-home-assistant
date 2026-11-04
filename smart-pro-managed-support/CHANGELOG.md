@@ -1,3 +1,12 @@
+## 3.19.6 — ID-86995 Direct Target-Group Initial Seed LAB (manual-only)
+
+- One exact pilot for ID-86995/amd64, with approved Broker 0.60.33, verified per-installation group and existing pairing.
+- Existing ID-28422 first-seed history and existing production/runtime identities retain their prior shared/target source contract.
+- The new initial seed requires MeshName `Smart Pro Managed — ID-86995`, and records runtime_source=target with full .msh binding; no fallback to shared group.
+- Persistent runtime for this exact pilot must reuse that target identity, and requires the verified first-seed report and cleanup before start.
+- No automatic initial enrollment, MeshAgent service install, technician permissions, group moves, zero-copy or changes to Portal/other add-ons.
+- Source candidate only; no live QA has been performed. Admin must publish manually, install only on ID-86995, verify preflight and approve one-shot action separately.
+
 ## 3.19.5 — ID-28422 First MeshAgent Identity · Manual LAB Pilot
 
 - This small, manual-only pilot requires an existing paired node, exact ID-28422 / amd64, current local policy ALLOWED and fresh matching Broker server authorization.

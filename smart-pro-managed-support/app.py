@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.5")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.6")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -128,7 +128,7 @@ FIRST_DEVICE_MESH_HINT_RE = re.compile(r"^[a-f0-9]{16}$")
 FIRST_DEVICE_INSTALLATION = "ID-34973"
 FIRST_DEVICE_GROUP = "Smart Pro Managed — ID-34973"
 FIRST_DEVICE_EXECUTION_VERSION = "3.17.4"
-CONTINUOUS_LIFECYCLE_VERSION = "3.19.5"
+CONTINUOUS_LIFECYCLE_VERSION = "3.19.6"
 # Stable production surface: archived actions stay locked regardless of version.
 STABLE_POST_ACTIONS_ONLY = True
 # Narrow recovery of one-time initial pairing only; not a legacy action unlock.
@@ -136,6 +136,7 @@ ASSISTED_INITIAL_PAIRING_ENABLED = True
 # Lab-only: explicit, non-repeatable first MeshAgent identity seeding, no auto runtime.
 FIRST_SEED_PILOT_ENABLED = True
 FIRST_SEED_PILOT_INSTALLATION = "ID-28422"
+DIRECT_SEED_PILOT_INSTALLATION = "ID-86995"
 FIRST_SEED_PILOT_ARCH = "amd64"
 FIRST_DEVICE_EXECUTION_MAX_RUNTIME = 75
 FIRST_DEVICE_EXECUTION_SHUTDOWN_GRACE = 3
@@ -2603,11 +2604,25 @@ def _execution_settings_material(identity):
         'source_fingerprint_hint':consume_hint,'sha256_hint':sha[:12],'bytes':len(raw),'agent_label':agent_label,
         'mesh_server_host':parsed.hostname.lower(),'installation_id':identity['installation_id'],'node_id':identity['node_id'],
         'client_version':VERSION,'architecture':ARCH})
-    return {'raw':raw,'fields':fields,'agent_label':agent_label,'sha256':sha,'bytes':len(raw)}
+    material = {'raw':raw,'fields':fields,'agent_label':agent_label,'sha256':sha,'bytes':len(raw)}
+    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION:
+        expected_group = f"Smart Pro Managed — {DIRECT_SEED_PILOT_INSTALLATION}"
+        if _safe_str(fields.get('MeshName'), 200) != expected_group:
+            raise RuntimeError('direct_seed_group_mismatch|Ο Broker δεν παρέδωσε το επαληθευμένο per-installation MeshCentral group.')
+        material['runtime_source'] = 'target'
+        material['target_group_name'] = expected_group
+    return material
 
 
 def _persistent_settings_material(identity, persisted_identity):
     source=_safe_str((persisted_identity or {}).get('runtime_source') or 'shared',20).lower()
+    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION:
+        if source != 'target':
+            raise RuntimeError('direct_seed_source_not_target|Η νέα identity δεν προέρχεται από το dedicated MeshCentral group.')
+        material = _execution_settings_material(identity)
+        if material.get('runtime_source') != 'target':
+            raise RuntimeError('direct_seed_settings_mismatch|Το target runtime source δεν επαληθεύτηκε.')
+        return material
     if source!='target':
         material=_execution_settings_material(identity)
         material['runtime_source']='shared'
@@ -3015,7 +3030,7 @@ def _persist_runtime_mesh_identity(runtime_dir, identity, settings_material, pri
     generation=max(1,_as_int((previous_meta or {}).get('generation')) or _as_int((prior or {}).get('generation')) or 1)
     continuity_runs=max(0,_as_int((previous_meta or {}).get('continuity_runs')) or _as_int((prior or {}).get('continuity_runs')) or 0)+1
     binding_sha=_mesh_identity_binding_hash(identity,settings_material)
-    runtime_source=_safe_str((previous_meta or {}).get('runtime_source') or (prior or {}).get('runtime_source') or 'shared',20).lower()
+    runtime_source=_safe_str((previous_meta or {}).get('runtime_source') or (prior or {}).get('runtime_source') or settings_material.get('runtime_source') or 'shared',20).lower()
     if runtime_source not in {'shared','target'}: runtime_source='shared'
     meta={
         'schema_version':1,'installation_id':identity['installation_id'],'broker_node_id':identity['node_id'],'architecture':ARCH,
@@ -3090,6 +3105,8 @@ def connectivity_canary_worker():
             'node_id':identity['node_id'],'client_version':VERSION,'architecture':ARCH})
 
         settings = _execution_settings_material(identity); agent_label=settings['agent_label']
+        if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION and settings.get('runtime_source') != 'target':
+            raise RuntimeError('direct_seed_shared_denied|Η πρώτη δημιουργία απαιτεί αποκλειστικά verified target group.')
         prior_identity=_validate_persisted_mesh_identity(identity,settings)
         identity_mode='seed' if prior_identity.get('state') == 'not_seeded' else 'reuse'
         identity_binding_verified=prior_identity.get('state') == 'ready'
@@ -3225,16 +3242,17 @@ def first_seed_pilot_readiness():
     if ARCH != FIRST_SEED_PILOT_ARCH:
         return False, "Το πιλοτικό enrollment επιτρέπεται μόνο σε amd64."
     identity = load_identity()
-    if not identity or identity.get('installation_id') != FIRST_SEED_PILOT_INSTALLATION:
-        return False, "Το πιλοτικό enrollment αφορά αποκλειστικά την ID-28422."
+    if not identity or identity.get('installation_id') not in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION):
+        return False, "Το πιλοτικό enrollment αφορά μόνο τις ρητά επιλεγμένες QA εγκαταστάσεις."
+    scoped_installation = identity['installation_id']
     local = read_policy()
     policy = local.get('policy') if isinstance(local.get('policy'),dict) else {}
-    if not local.get('allowed_local') or _safe_str(policy.get('installation_id'),100).upper() != FIRST_SEED_PILOT_INSTALLATION:
+    if not local.get('allowed_local') or _safe_str(policy.get('installation_id'),100).upper() != scoped_installation:
         return False, "Η τοπική πολιτική ή η εγκατάσταση δεν επιτρέπει enrollment."
     server = get_server_state()
     if (server.get('authorized_server') is not True
             or (_as_int(server.get('valid_until')) or 0) <= now_ts()
-            or _safe_str(server.get('installation_id'),100).upper() != FIRST_SEED_PILOT_INSTALLATION
+            or _safe_str(server.get('installation_id'),100).upper() != scoped_installation
             or _safe_str(server.get('node_id'),64).upper() != identity.get('node_id')):
         return False, "Δεν υπάρχει πρόσφατη και ακριβώς δεμένη εξουσιοδότηση Broker."
     if get_mesh_identity_status(identity).get('state') != 'not_seeded':
@@ -3257,6 +3275,15 @@ def request_first_seed_pilot():
     if not ok:
         raise RuntimeError('first_seed_denied|' + reason)
     identity = load_identity()
+    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION:
+        # Preflight the actual target .msh before consuming the irreversible one-shot latch.
+        # No agent binary or MeshAgent process is started by this preflight.
+        probe = _execution_settings_material(identity)
+        try:
+            if probe.get('runtime_source') != 'target' or probe.get('target_group_name') != f"Smart Pro Managed — {DIRECT_SEED_PILOT_INSTALLATION}":
+                raise RuntimeError('direct_seed_preflight_denied|Το πραγματικό verified source δεν είναι το ακριβές target group.')
+        finally:
+            probe['raw'] = b''
     DATA_DIR.mkdir(parents=True,exist_ok=True)
     # Atomic persistent latch survives restarts and even partially failed attempts.
     # Never remove it automatically; failed attempts require separate human review.
@@ -3911,7 +3938,7 @@ def start_persistent_runtime():
         status = get_mesh_identity_status(identity)
         if status.get('state') != 'ready':
             raise RuntimeError('persistent_identity_not_ready|Η σταθερή MeshCentral identity δεν είναι READY. Δεν θα δημιουργηθεί νέο node από την 3.9.0.')
-        if identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and FIRST_SEED_ATTEMPT_FILE.exists():
+        if identity.get('installation_id') in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION) and FIRST_SEED_ATTEMPT_FILE.exists():
             first_seed_report = load_canary_state()
             if not (first_seed_report.get('status') == 'reported'
                     and first_seed_report.get('verified') is True
@@ -5975,19 +6002,20 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
     unattended_text = "DISABLED"
 
     first_seed_html = ""
-    if identity is not None and identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and ARCH == FIRST_SEED_PILOT_ARCH:
+    if identity is not None and identity.get('installation_id') in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION) and ARCH == FIRST_SEED_PILOT_ARCH:
         ready, seed_reason = first_seed_pilot_readiness()
+        scope_id = identity['installation_id']
         seeded_state = get_mesh_identity_status(identity).get('state')
         attempt_label = 'Αναμονή ρητής εκτέλεσης' if ready else ('MeshAgent identity READY — δεν επιτρέπεται νέα δημιουργία' if seeded_state == 'ready' else seed_reason)
         seed_disabled = '' if ready else ' disabled'
         first_seed_html = f'''<section class="pairbox operational-card">
-<h2>Πρώτη δημιουργία MeshAgent identity · ID-28422</h2>
+<h2>Πρώτη δημιουργία MeshAgent identity · {esc(scope_id)}</h2>
 <p>Μόνο ελεγχόμενο αρχικό enrollment. Μία σύντομη foreground εκτέλεση έως 45 δευτερόλεπτα, με ρητή άδεια Broker, χωρίς μόνιμη σύνδεση, χωρίς εγκατάσταση service και χωρίς δικαιώματα τεχνικού.</p>
 <div class="tool-lock">Δεν εκτελείται αυτόματα. Η ενέργεια επιτρέπεται μία φορά και δεν επαναλαμβάνεται αυτόματα ακόμη και αν αποτύχει.</div>
-<div class="mini-grid"><div><span>Έλεγχος</span><strong>{esc(attempt_label)}</strong></div><div><span>Εγκατάσταση</span><strong>ID-28422 · amd64</strong></div><div><span>Automatic Managed</span><strong>OFF έως νέα εντολή</strong></div></div>
+<div class="mini-grid"><div><span>Έλεγχος</span><strong>{esc(attempt_label)}</strong></div><div><span>Εγκατάσταση</span><strong>{esc(scope_id)} · amd64</strong></div><div><span>Automatic Managed</span><strong>OFF έως νέα εντολή</strong></div></div>
 <form method="post" action="first-identity-enrollment">
 <input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
-<label><input type="checkbox" name="confirm_first_seed" value="ID-28422" required{seed_disabled} style="width:auto;max-width:none;margin-right:8px">Επιβεβαιώνω μία μοναδική δοκιμή πρώτης MeshAgent identity για ID-28422 και ότι δεν υπάρχει αυτόματη επανάληψη.</label>
+<label><input type="checkbox" name="confirm_first_seed" value="{esc(scope_id)}" required{seed_disabled} style="width:auto;max-width:none;margin-right:8px">Επιβεβαιώνω μία μοναδική δοκιμή πρώτης MeshAgent identity για {esc(scope_id)} και ότι δεν υπάρχει αυτόματη επανάληψη.</label>
 <button type="submit"{seed_disabled}>Έναρξη πρώτης δημιουργίας identity (≤45″)</button>
 </form></section>'''
 
@@ -6023,7 +6051,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
         plabel_node = persistent_state.get('agent_label') if pcurrent else (mesh_identity_status.get('agent_label') or '—')
         pclean = 'Ναι' if pcurrent and persistent_state.get('runtime_directory_deleted') else ('Όχι — runtime ενεργό' if PERSISTENT_WORKER_ACTIVE else '—')
         identity_ready = mesh_identity_status.get('state') == 'ready'
-        if identity.get('installation_id') == FIRST_SEED_PILOT_INSTALLATION and FIRST_SEED_ATTEMPT_FILE.exists():
+        if identity.get('installation_id') in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION) and FIRST_SEED_ATTEMPT_FILE.exists():
             # Broker report and local persistence/cleanup must agree before start is offered.
             first_seed_report = load_canary_state()
             identity_ready = (identity_ready and first_seed_report.get('status') == 'reported'
@@ -6801,7 +6829,7 @@ def stop_router_compatibility():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SmartProManaged/3.19.5"
+    server_version = "SmartProManaged/3.19.6"
 
     def _send(self, code, body, content_type):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -6928,8 +6956,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(409, render_page(read_policy(), "Η continuous Managed λειτουργία είναι ενεργή. Επιτρέπονται μόνο ασφαλής τερματισμός ή οι verification-only migration έλεγχοι.", "bad"), "text/html; charset=utf-8")
             return
         if is_first_seed:
-            if (form.get('confirm_first_seed') or [''])[0] != FIRST_SEED_PILOT_INSTALLATION:
-                self._send(409, render_page(read_policy(), "Απαιτείται ρητή επιβεβαίωση της εγκατάστασης ID-28422.", "bad"), "text/html; charset=utf-8")
+            if (form.get('confirm_first_seed') or [''])[0] != (load_identity() or {}).get('installation_id'):
+                self._send(409, render_page(read_policy(), "Απαιτείται ρητή επιβεβαίωση της ακριβούς πιλοτικής εγκατάστασης.", "bad"), "text/html; charset=utf-8")
                 return
             try:
                 request_first_seed_pilot()
@@ -7223,7 +7251,7 @@ if __name__ == "__main__":
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
         if STABLE_POST_ACTIONS_ONLY:
-            print("[managed] 3.19.5 stable action gate: start/stop, initial pairing and ID-28422 one-shot first-seed only; archived actions locked", flush=True)
+            print("[managed] 3.19.6 stable action gate: start/stop, initial pairing and explicitly scoped one-shot first-seed pilots only; archived actions locked", flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
     router_compat_started = False
