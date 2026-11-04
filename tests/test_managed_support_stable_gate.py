@@ -28,7 +28,7 @@ def invoke(path):
 
 class StableGateTests(unittest.TestCase):
     def test_expected_version_and_version_independent_gate(self):
-        self.assertEqual(app.CONTINUOUS_LIFECYCLE_VERSION, "3.19.5")
+        self.assertEqual(app.CONTINUOUS_LIFECYCLE_VERSION, "3.19.6")
         self.assertTrue(app.STABLE_POST_ACTIONS_ONLY)
 
     def test_legacy_post_routes_are_denied_without_mutation(self):
