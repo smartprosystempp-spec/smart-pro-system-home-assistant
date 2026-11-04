@@ -1,3 +1,10 @@
+## 3.19.7 — Assisted First MeshAgent Identity, target-only (2026-11-04)
+
+- General, exact-installation first-seed pilot using a fresh Broker 0.60.41 per-installation source; strict canonical MeshName, no shared fallback.
+- One explicit local approval, ≤45s foreground-only MeshAgent, durable one-shot latch, stable-identity persistence, no auto reconnect until separately activated.
+- First-seed report and local cleanup must verify before unattended runtime can start; existing 3.19.6 installations are not updated in this checkpoint.
+- No technician rights or service installation. First MeshCentral binding still requires an independent verified Broker step.
+
 ## 3.19.6 — ID-86995 Direct Target-Group Initial Seed LAB (manual-only)
 
 - One exact pilot for ID-86995/amd64, with approved Broker 0.60.33, verified per-installation group and existing pairing.
