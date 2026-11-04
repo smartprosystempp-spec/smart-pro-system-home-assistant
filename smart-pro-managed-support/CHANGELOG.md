@@ -1,3 +1,11 @@
+## 3.19.9 — Single assisted reuse-only native-node observation pilot (2026-11-04)
+
+- Strictly scoped to ID-56674/amd64; requires one-shot Admin Broker ARM and preserved 3.19.7 seed evidence.
+- Separate 45-second reuse-only execution uses original persisted identity, never first-seed or service installation.
+- Broker controller must observe same native node ID and immutable group online within bounded window; no binding writes.
+- Original first seed receipt remains unchanged. Continuous runtime and technician actions remain OFF.
+- A failed attempt is NOT automatically replayed; requires independent admin review.
+
 ## 3.19.8 — Assisted Local Identity Evidence (READ ONLY, 2026-11-04)
 
 - Exact ID-56674 / amd64 local integrity inspector for protected first-seed latch,

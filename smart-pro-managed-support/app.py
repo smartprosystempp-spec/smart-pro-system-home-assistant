@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.8")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.9")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -69,6 +69,8 @@ AGENT_STATE_FILE = DATA_DIR / "agent-binary-verification.json"
 RUNTIME_STATE_FILE = DATA_DIR / "runtime-lease-dry-run.json"
 CANARY_STATE_FILE = DATA_DIR / "identity-continuity-canary.json"
 FIRST_SEED_ATTEMPT_FILE = DATA_DIR / "first-meshagent-seed-attempt-v1.json"
+REUSE_PROOF_ATTEMPT_FILE = DATA_DIR / "assisted-reuse-proof-attempt-3199.json"
+REUSE_PROOF_STATE_FILE = DATA_DIR / "assisted-reuse-proof-state-3199.json"
 PERSISTENT_STATE_FILE = DATA_DIR / "continuous-runtime-state.json"
 UNATTENDED_CONTROL_FILE = DATA_DIR / "unattended-runtime-control.json"
 GROUP_MIGRATION_PREFLIGHT_FILE = DATA_DIR / "group-migration-preflight.json"
@@ -153,6 +155,8 @@ RUNTIME_WORKER_LOCK = threading.Lock()
 RUNTIME_WORKER_ACTIVE = False
 CANARY_WORKER_LOCK = threading.Lock()
 CANARY_WORKER_ACTIVE = False
+REUSE_PROOF_WORKER_LOCK = threading.Lock()
+REUSE_PROOF_WORKER_ACTIVE = False
 PERSISTENT_WORKER_LOCK = threading.Lock()
 PERSISTENT_WORKER_ACTIVE = False
 PERSISTENT_STOP_EVENT = threading.Event()
@@ -2547,6 +2551,84 @@ def load_canary_state():
     }
 
 
+def save_reuse_proof_state(state):
+    """Persist non-secret canary metadata only. Raw tickets/settings/agent never enter /data."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    safe = {
+        "status": _safe_str(state.get("status"), 40),
+        "verified": state.get("verified") is True,
+        "started_at": _as_int(state.get("started_at")) or 0,
+        "ended_at": _as_int(state.get("ended_at")) or 0,
+        "result_code": _safe_str(state.get("result_code"), 80),
+        "elapsed_seconds": _as_int(state.get("elapsed_seconds")) or 0,
+        "max_runtime_seconds": _as_int(state.get("max_runtime_seconds")) or 0,
+        "agent_label": _safe_str(state.get("agent_label"), 40).upper(),
+        "installation_id": _safe_str(state.get("installation_id"), 100).upper(),
+        "node_id": _safe_str(state.get("node_id"), 64).upper(),
+        "client_version": _safe_str(state.get("client_version"), 30),
+        "architecture": _safe_str(state.get("architecture"), 20),
+        "runtime_directory_deleted": state.get("runtime_directory_deleted") is True,
+        "technician_actions_authorized": False,
+        "identity_mode": _safe_str(state.get("identity_mode"), 20),
+        "identity_db_persisted": state.get("identity_db_persisted") is True,
+        "identity_binding_verified": state.get("identity_binding_verified") is True,
+        "identity_db_sha256_hint": _safe_str(state.get("identity_db_sha256_hint"), 12).lower(),
+        "identity_generation": max(0, _as_int(state.get("identity_generation")) or 0),
+        "identity_continuity_runs": max(0, _as_int(state.get("identity_continuity_runs")) or 0),
+        "identity_relative_path": _safe_str(state.get("identity_relative_path"), 200),
+    }
+    tmp = REUSE_PROOF_STATE_FILE.with_suffix('.tmp')
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write(json.dumps(safe, ensure_ascii=False, separators=(',', ':')))
+            handle.flush(); os.fsync(handle.fileno())
+        os.replace(tmp, REUSE_PROOF_STATE_FILE)
+        os.chmod(REUSE_PROOF_STATE_FILE, 0o600)
+    finally:
+        try:
+            if tmp.exists(): tmp.unlink()
+        except OSError: pass
+
+
+def load_reuse_proof_state():
+    try:
+        if not REUSE_PROOF_STATE_FILE.exists() or REUSE_PROOF_STATE_FILE.stat().st_size <= 0 or REUSE_PROOF_STATE_FILE.stat().st_size > 16384:
+            return {}
+        data = json.loads(REUSE_PROOF_STATE_FILE.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict): return {}
+    status = _safe_str(data.get('status'), 40)
+    if status not in {'not_run','preparing','running','reported','failed'}: status = 'not_run'
+    return {
+        'status': status,
+        'verified': data.get('verified') is True,
+        'started_at': _as_int(data.get('started_at')) or 0,
+        'ended_at': _as_int(data.get('ended_at')) or 0,
+        'result_code': _safe_str(data.get('result_code'), 80),
+        'elapsed_seconds': _as_int(data.get('elapsed_seconds')) or 0,
+        'max_runtime_seconds': _as_int(data.get('max_runtime_seconds')) or 0,
+        'agent_label': _safe_str(data.get('agent_label'), 40).upper(),
+        'installation_id': _safe_str(data.get('installation_id'), 100).upper(),
+        'node_id': _safe_str(data.get('node_id'), 64).upper(),
+        'client_version': _safe_str(data.get('client_version'), 30),
+        'architecture': _safe_str(data.get('architecture'), 20),
+        'runtime_directory_deleted': data.get('runtime_directory_deleted') is True,
+        'technician_actions_authorized': False,
+        'identity_mode': _safe_str(data.get('identity_mode'), 20),
+        'runtime_source': _safe_str(data.get('runtime_source') or 'shared',20).lower(),
+        'identity_db_persisted': data.get('identity_db_persisted') is True,
+        'identity_binding_verified': data.get('identity_binding_verified') is True,
+        'identity_db_sha256_hint': _safe_str(data.get('identity_db_sha256_hint'), 12).lower(),
+        'identity_generation': max(0, _as_int(data.get('identity_generation')) or 0),
+        'identity_continuity_runs': max(0, _as_int(data.get('identity_continuity_runs')) or 0),
+        'identity_relative_path': _safe_str(data.get('identity_relative_path'), 200),
+    }
+
+
+
+
 def _execution_settings_material(identity):
     """Fresh Managed 3.x enrollment + secure-settings consume, returning raw .msh only in memory."""
     enrollment = verify_enrollment_authorization()
@@ -2610,7 +2692,8 @@ def _execution_settings_material(identity):
         'client_version':VERSION,'architecture':ARCH})
     material = {'raw':raw,'fields':fields,'agent_label':agent_label,'sha256':sha,'bytes':len(raw)}
     assisted_first = assisted_first_seed_scope(identity)
-    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first:
+    assisted_reuse = VERSION == '3.19.9' and identity['installation_id'] == 'ID-56674' and ARCH == 'amd64'
+    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first or assisted_reuse:
         expected_group = f"Smart Pro Managed — {identity['installation_id']}"
         if _safe_str(fields.get('MeshName'), 200) != expected_group:
             if assisted_first:
@@ -3243,6 +3326,159 @@ def connectivity_canary_worker():
             save_canary_state(state)
         with CANARY_WORKER_LOCK: CANARY_WORKER_ACTIVE=False
 
+def assisted_reuse_proof_worker():
+    global REUSE_PROOF_WORKER_ACTIVE
+    identity = load_identity(); runtime_dir=None; agent_temp=None; proc=None; report_token=''; result='launch_failed'; started=now_ts()
+    max_runtime=0; agent_label=''; cleanup_ok=True; identity_mode=''; identity_db_persisted=False; identity_binding_verified=False
+    identity_db_sha256_hint=''; identity_generation=0; identity_continuity_runs=0; identity_relative_path=''; settings=None; prior_identity={}
+    try:
+        if identity is None or not assisted_local_version() or ARCH != 'amd64' or identity['installation_id'] != 'ID-56674':
+            raise RuntimeError('reuse_scope_invalid|Η μία reuse-only δοκιμή αφορά αποκλειστικά ID-56674 / 3.19.9 / amd64.')
+        if not REUSE_PROOF_ATTEMPT_FILE.exists():
+            raise RuntimeError('reuse_not_authorized_local|Λείπει η μοναδική τοπική εντολή.')
+        if assisted_local_reuse_evidence(identity)['stage'] != 'LOCAL_REUSE_EVIDENCE_READY':
+            raise RuntimeError('reuse_local_evidence_blocked|Δεν επαληθεύτηκε το αρχικό immutable First Seed evidence.')
+        if load_unattended_control().get('enabled') is True:
+            raise RuntimeError('reuse_unattended_active|Η αυτόματη Managed λειτουργία πρέπει να είναι OFF.')
+        if not read_policy().get('allowed_local'): raise RuntimeError('local_policy_denied|Η τοπική Managed πολιτική δεν επιτρέπει reuse-only identity continuity proof.')
+        server=get_server_state(); server_until=_as_int(server.get('valid_until')) or 0
+        if server.get('authorized_server') is not True or server_until <= now_ts():
+            raise RuntimeError('server_authorization_required|Απαιτείται ενεργό Broker Server Authorization πριν από το reuse-only identity continuity proof.')
+        save_reuse_proof_state({'status':'preparing','verified':False,'started_at':started,'installation_id':identity['installation_id'],
+            'node_id':identity['node_id'],'client_version':VERSION,'architecture':ARCH})
+
+        settings = _execution_settings_material(identity); agent_label=settings['agent_label']
+        assisted_first = assisted_first_seed_scope(identity)
+        if (identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first) and (
+                settings.get('runtime_source') != 'target'
+                or settings.get('target_group_name') != f"Smart Pro Managed — {identity['installation_id']}"):
+            if assisted_first:
+                raise RuntimeError('assisted_seed_shared_denied|Η πρώτη δημιουργία απαιτεί αποκλειστικά το exact verified target group.')
+            raise RuntimeError('direct_seed_shared_denied|Η πρώτη δημιουργία απαιτεί αποκλειστικά verified target group.')
+        prior_identity=_validate_persisted_mesh_identity(identity,settings)
+        if prior_identity.get('state') != 'ready' or prior_identity.get('runtime_source') != 'target':
+            raise RuntimeError('reuse_identity_not_ready|Απαιτείται ήδη αποθηκευμένη target identity, χωρίς seed path.')
+        identity_mode='reuse'
+        identity_binding_verified=prior_identity.get('state') == 'ready'
+        identity_generation=max(0,_as_int(prior_identity.get('generation')) or 0)
+        identity_continuity_runs=max(0,_as_int(prior_identity.get('continuity_runs')) or 0)
+        identity_relative_path=_safe_str(prior_identity.get('runtime_relative_path'),200)
+        if settings.get('runtime_source') != 'target' or settings.get('target_group_name') != 'Smart Pro Managed — ID-56674':
+            raise RuntimeError('reuse_target_only_denied|Μη έγκυρο exact per-installation source.')
+        agent = _execution_agent_material(identity, settings); agent_temp=agent['path']
+        common={'node_id':identity['node_id'],'node_secret':identity['node_secret'],'client_version':VERSION,'architecture':ARCH}
+        lease=broker_post('/managed/runtime-lease/request', common); lease_token=_safe_str(lease.get('runtime_lease'),90)
+        lease_exp=parse_iso_epoch(lease.get('expires_at'))
+        if not (lease.get('success') is True and lease.get('runtime_contract')=='smart-pro-managed-runtime-lease-v1'
+                and lease.get('runtime_authorized') is True and lease.get('execution') is False and RUNTIME_LEASE_RE.fullmatch(lease_token)
+                and lease_exp>now_ts()):
+            raise RuntimeError('canary_runtime_lease_invalid|Δεν εκδόθηκε έγκυρο runtime lease για το reuse-only identity continuity proof.')
+        can_req=dict(common); can_req['runtime_lease']=lease_token
+        auth=broker_post('/managed/execution-canary/request', can_req)
+        canary_ticket=_safe_str(auth.get('canary_ticket'),90); report_token=_safe_str(auth.get('report_token'),90)
+        max_runtime=min(CANARY_LOCAL_MAX_RUNTIME,_as_int(auth.get('max_runtime_seconds')) or 0)
+        if not (auth.get('success') is True and auth.get('canary_contract')=='smart-pro-managed-execution-canary-v1'
+                and auth.get('state')=='canary_ticket_issued_runtime_not_started' and auth.get('foreground_only') is True
+                and auth.get('install') is False and auth.get('service_persistence') is False
+                and auth.get('technician_actions_authorized') is False and CANARY_TICKET_RE.fullmatch(canary_ticket)
+                and CANARY_REPORT_RE.fullmatch(report_token) and 1 <= max_runtime <= CANARY_LOCAL_MAX_RUNTIME):
+            raise RuntimeError('canary_authorization_invalid|Ο Broker δεν επέστρεψε έγκυρη identity-continuity canary authorization.')
+        consume=dict(common); consume['canary_ticket']=canary_ticket
+        run=broker_post('/managed/execution-canary/consume',consume)
+        hard_deadline=parse_iso_epoch(run.get('hard_deadline')); watch_interval=_as_int(run.get('watch_interval_seconds')) or CANARY_POLL_FALLBACK
+        if not (run.get('success') is True and run.get('canary_contract')=='smart-pro-managed-execution-canary-v1'
+                and run.get('state')=='canary_execution_authorized_connectivity_only' and run.get('foreground_only') is True
+                and run.get('install') is False and run.get('service_persistence') is False
+                and run.get('meshcentral_connectivity_canary') is True and run.get('technician_actions_authorized') is False
+                and 1 <= (_as_int(run.get('max_runtime_seconds')) or 0) <= CANARY_LOCAL_MAX_RUNTIME and hard_deadline>now_ts()):
+            raise RuntimeError('canary_consume_invalid|Η identity-continuity canary authorization δεν καταναλώθηκε σωστά.')
+        max_runtime=min(max_runtime,_as_int(run.get('max_runtime_seconds')) or max_runtime)
+
+        runtime_dir=Path(tempfile.mkdtemp(prefix='smart-pro-managed-identity-canary-',dir='/tmp')); os.chmod(runtime_dir,0o700)
+        agent_path=runtime_dir/'meshagent'; shutil.move(agent_temp,agent_path); agent_temp=None; os.chmod(agent_path,0o700)
+        msh_path=runtime_dir/'meshagent.msh'; hardened=_harden_runtime_msh(settings['raw'],agent_label)
+        fd=os.open(msh_path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+        with os.fdopen(fd,'wb') as h: h.write(hardened); h.flush(); os.fsync(h.fileno())
+        private=runtime_dir/'private'; private.mkdir(mode=0o700)
+        prepared=_copy_persisted_identity_into_runtime(runtime_dir,identity,settings)
+        identity_mode=prepared.get('mode') or identity_mode
+        identity_generation=max(identity_generation,_as_int(prepared.get('generation')) or 0)
+        identity_continuity_runs=max(identity_continuity_runs,_as_int(prepared.get('continuity_runs')) or 0)
+        identity_relative_path=_safe_str(prepared.get('runtime_relative_path'),200)
+        identity_binding_verified=identity_mode == 'reuse'
+        env=os.environ.copy(); env.update({'HOME':str(private),'TMPDIR':str(private),'XDG_CONFIG_HOME':str(private),'XDG_CACHE_HOME':str(private)})
+        process_started_at=now_ts()
+        save_reuse_proof_state({'status':'running','verified':False,'started_at':process_started_at,'max_runtime_seconds':max_runtime,'agent_label':agent_label,
+            'installation_id':identity['installation_id'],'node_id':identity['node_id'],'client_version':VERSION,'architecture':ARCH,
+            'identity_mode':identity_mode,'identity_db_persisted':False,'identity_binding_verified':identity_binding_verified,
+            'identity_generation':identity_generation,'identity_continuity_runs':identity_continuity_runs,'identity_relative_path':identity_relative_path})
+        proc=subprocess.Popen(['setsid','./meshagent'],cwd=str(runtime_dir),stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                              env=env,close_fds=True)
+        run_started=time.monotonic(); result='runtime_limit'
+        broker_remaining=max(0,hard_deadline-now_ts())
+        hard_stop_monotonic=run_started+min(max_runtime,broker_remaining)
+        graceful_stop_monotonic=max(run_started,hard_stop_monotonic-CANARY_SHUTDOWN_GRACE)
+        while True:
+            elapsed=int(time.monotonic()-run_started)
+            if proc.poll() is not None:
+                result='agent_exit'; break
+            if time.monotonic() >= graceful_stop_monotonic or now_ts() >= max(0,hard_deadline-CANARY_SHUTDOWN_GRACE):
+                result='runtime_limit'; break
+            if not read_policy().get('allowed_local'):
+                result='runtime_lease_lost'; break
+            watch=broker_post('/managed/execution-canary/watch',{'report_token':report_token,'node_id':identity['node_id'],'node_secret':identity['node_secret']})
+            if watch.get('continue') is not True:
+                reason=_safe_str(watch.get('reason'),80)
+                result='runtime_limit' if reason=='canary_runtime_limit' else 'runtime_lease_lost'
+                break
+            remaining=max(0.0,graceful_stop_monotonic-time.monotonic())
+            if remaining<=0:
+                result='runtime_limit'; break
+            time.sleep(min(max(1,min(10,watch_interval)),remaining))
+        _terminate_process_group_before(proc,hard_stop_monotonic)
+        elapsed=int(time.monotonic()-run_started)
+        persisted=_persist_runtime_mesh_identity(runtime_dir,identity,settings,prior_identity)
+        identity_db_persisted=True; identity_binding_verified=True
+        identity_db_sha256_hint=_safe_str(persisted.get('db_sha256'),80)[:12]
+        identity_generation=max(1,_as_int(persisted.get('generation')) or 1)
+        identity_continuity_runs=max(1,_as_int(persisted.get('continuity_runs')) or 1)
+        identity_relative_path=_safe_str(persisted.get('runtime_relative_path'),200)
+        report_ok=_report_canary(identity,report_token,result,elapsed)
+        save_reuse_proof_state({'status':'reported' if report_ok else 'failed','verified':report_ok,'started_at':process_started_at,'ended_at':now_ts(),
+            'result_code':result,'elapsed_seconds':elapsed,'max_runtime_seconds':max_runtime,'agent_label':agent_label,
+            'installation_id':identity['installation_id'],'node_id':identity['node_id'],'client_version':VERSION,'architecture':ARCH,
+            'runtime_directory_deleted':False,'identity_mode':identity_mode,'identity_db_persisted':identity_db_persisted,
+            'identity_binding_verified':identity_binding_verified,'identity_db_sha256_hint':identity_db_sha256_hint,
+            'identity_generation':identity_generation,'identity_continuity_runs':identity_continuity_runs,'identity_relative_path':identity_relative_path})
+        print(f"[managed] reuse-only identity continuity proof mode={identity_mode} generation={identity_generation} continuity_runs={identity_continuity_runs} persisted=true db_hint={identity_db_sha256_hint}; technician_actions=false",flush=True)
+    except (RuntimeError,OSError,subprocess.SubprocessError) as exc:
+        if proc is not None: _terminate_process_group(proc)
+        elapsed=max(0,now_ts()-started)
+        text=str(exc); code,msg=(text.split('|',1)+[''])[:2] if '|' in text else ('canary_failed',text)
+        broker_result='cleanup_failed' if code.startswith('mesh_identity_') and report_token else 'launch_failed'
+        if report_token: _report_canary(identity,report_token,broker_result,elapsed)
+        save_reuse_proof_state({'status':'failed','verified':False,'started_at':started,'ended_at':now_ts(),'result_code':code,'elapsed_seconds':elapsed,
+            'max_runtime_seconds':max_runtime,'agent_label':agent_label,'installation_id':(identity or {}).get('installation_id',''),
+            'node_id':(identity or {}).get('node_id',''),'client_version':VERSION,'architecture':ARCH,'runtime_directory_deleted':False,
+            'identity_mode':identity_mode,'identity_db_persisted':identity_db_persisted,'identity_binding_verified':identity_binding_verified,
+            'identity_db_sha256_hint':identity_db_sha256_hint,'identity_generation':identity_generation,'identity_continuity_runs':identity_continuity_runs,'identity_relative_path':identity_relative_path})
+        print(f"[managed] reuse-only identity continuity proof failed code={code}; no raw credentials/tokens logged",flush=True)
+    finally:
+        if proc is not None: _terminate_process_group(proc)
+        if agent_temp:
+            try: Path(agent_temp).unlink(missing_ok=True)
+            except OSError: cleanup_ok=False
+        if runtime_dir:
+            try: shutil.rmtree(runtime_dir)
+            except OSError: cleanup_ok=False
+        state=load_reuse_proof_state()
+        if state:
+            state['runtime_directory_deleted']=cleanup_ok
+            save_reuse_proof_state(state)
+        with REUSE_PROOF_WORKER_LOCK: REUSE_PROOF_WORKER_ACTIVE=False
+
+
+
 def start_connectivity_canary():
     global CANARY_WORKER_ACTIVE
     with CANARY_WORKER_LOCK:
@@ -3251,6 +3487,34 @@ def start_connectivity_canary():
         if CANARY_WORKER_ACTIVE: raise RuntimeError('canary_already_running|Υπάρχει ήδη identity continuity canary σε εξέλιξη.')
         CANARY_WORKER_ACTIVE=True
     t=threading.Thread(target=connectivity_canary_worker,name='managed-identity-continuity-canary',daemon=True); t.start()
+
+
+def start_assisted_reuse_proof():
+    """One-time explicit local action. Remote Broker must independently be ARMED."""
+    global REUSE_PROOF_WORKER_ACTIVE
+    identity=load_identity()
+    if not identity or identity.get('installation_id')!='ID-56674' or VERSION!='3.19.9' or ARCH!='amd64':
+        raise RuntimeError('reuse_scope_invalid|Λανθασμένη έκδοση ή Installation ID.')
+    evidence=assisted_local_reuse_evidence(identity)
+    if evidence['stage']!='LOCAL_REUSE_EVIDENCE_READY':
+        raise RuntimeError('reuse_not_ready|Η αποθηκευμένη identity δεν είναι ακόμη αποδεδειγμένα έτοιμη.')
+    if REUSE_PROOF_ATTEMPT_FILE.exists() or REUSE_PROOF_STATE_FILE.exists():
+        raise RuntimeError('reuse_already_attempted|Υπάρχει ήδη το μοναδικό reuse proof. Δεν επιτρέπεται επανάληψη.')
+    with REUSE_PROOF_WORKER_LOCK:
+        if any((REUSE_PROOF_WORKER_ACTIVE, CANARY_WORKER_ACTIVE, PERSISTENT_WORKER_ACTIVE,
+                CANDIDATE_RECONNECT_WORKER_ACTIVE, IDENTITY_RESEED_WORKER_ACTIVE)):
+            raise RuntimeError('reuse_worker_busy|Υπάρχει ήδη Managed εργασία.')
+        DATA_DIR.mkdir(parents=True,exist_ok=True)
+        record={'installation_id':'ID-56674','node_id':identity['node_id'],'requested_at':now_ts(),
+                'client_version':VERSION,'one_shot':True,'first_seed':False,'unattended':False}
+        try:
+            fd=os.open(REUSE_PROOF_ATTEMPT_FILE,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        except FileExistsError:
+            raise RuntimeError('reuse_attempt_race|Η δοκιμή έχει ήδη καταγραφεί.') from None
+        with os.fdopen(fd,'w',encoding='utf-8') as h:
+            h.write(json.dumps(record,separators=(',',':')));h.flush();os.fsync(h.fileno())
+        REUSE_PROOF_WORKER_ACTIVE=True
+    threading.Thread(target=assisted_reuse_proof_worker,name='managed-reuse-proof-56674',daemon=True).start()
 
 
 def assisted_first_seed_scope(identity=None):
@@ -3264,12 +3528,12 @@ def assisted_first_seed_scope(identity=None):
 
 
 # 3.19.8 — local-only reuse evidence; NOT a MeshCentral identity attestation.
-ASSISTED_LOCAL_EVIDENCE_VERSION = '3.19.8'
+ASSISTED_LOCAL_EVIDENCE_VERSION = '3.19.9'
 ASSISTED_LOCAL_EVIDENCE_INSTALLATION = 'ID-56674'
 
 
 def assisted_local_version():
-    return re.fullmatch(r'3\.19\.8(?:[-+][A-Za-z0-9._-]+)?', VERSION) is not None
+    return VERSION in ('3.19.8', '3.19.9')
 
 
 def _assisted_evidence_json(path, limit):
@@ -3341,12 +3605,24 @@ def assisted_local_reuse_evidence(identity=None):
     try: state=_validate_persisted_mesh_identity(identity, None)
     except RuntimeError: state={}
     checks['identity_db_integrity'] = state.get('state') == 'ready'
+    # The first-seed receipt remains immutable. After one controlled reuse the
+    # protected identity DB can legitimately change; compare its new hash only
+    # against the separately recorded, cleanup-verified reuse receipt.
+    proof = load_reuse_proof_state() if VERSION == '3.19.9' else {}
+    proof_match = bool(proof and proof.get('client_version') == '3.19.9'
+        and proof.get('identity_mode') == 'reuse' and proof.get('identity_db_persisted') is True
+        and proof.get('identity_binding_verified') is True and proof.get('runtime_directory_deleted') is True
+        and proof.get('status') == 'reported' and proof.get('verified') is True
+        and proof.get('result_code') == 'runtime_limit'
+        and proof.get('installation_id') == install and proof.get('node_id') == node
+        and proof.get('identity_db_sha256_hint') == state.get('db_sha256','')[:12])
+    original_match = state.get('continuity_runs') == 1 and state.get('db_sha256','')[:12] == (report or {}).get('identity_db_sha256_hint')
+    reuse_match = state.get('continuity_runs') == 2 and proof_match
     checks['stable_target_provenance'] = (checks['identity_db_integrity']
-        and state.get('generation') == 1 and state.get('continuity_runs') == 1
+        and state.get('generation') == 1 and (original_match or reuse_match)
         and state.get('runtime_source') == 'target'
         and state.get('target_group_name') == f'Smart Pro Managed — {install}'
-        and bool(report) and state.get('agent_label') == report.get('agent_label')
-        and state.get('db_sha256','')[:12] == report.get('identity_db_sha256_hint'))
+        and bool(report) and state.get('agent_label') == report.get('agent_label'))
     checks['unattended_paused'] = load_unattended_control().get('enabled') is not True
     checks['runtime_inactive'] = not any((CANARY_WORKER_ACTIVE, PERSISTENT_WORKER_ACTIVE,
         RUNTIME_WORKER_ACTIVE, FIRST_DEVICE_EXECUTION_WORKER_ACTIVE,
@@ -6160,7 +6436,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
         evidence_checks = ''.join('<div><span>' + esc(k.replace('_',' ')) + '</span><strong>'
             + ('PASS' if value else 'BLOCKED') + '</strong></div>' for k,value in evidence['checks'].items())
         local_evidence_html = f"""<section class="pairbox operational-card">
-<div class="section-heading"><div><div class="eyebrow">READ ONLY · 3.19.8</div><h2>Ακεραιότητα σταθερής MeshAgent identity · {esc(ASSISTED_LOCAL_EVIDENCE_INSTALLATION)}</h2></div></div>
+<div class="section-heading"><div><div class="eyebrow">LOCAL SEED EVIDENCE · 3.19.9</div><h2>Ακεραιότητα σταθερής MeshAgent identity · {esc(ASSISTED_LOCAL_EVIDENCE_INSTALLATION)}</h2></div></div>
 <p>Ο έλεγχος διαβάζει αποκλειστικά τα ήδη αποθηκευμένα τοπικά στοιχεία του 3.19.7 First Seed. Δεν γίνεται εκτέλεση MeshAgent, αποστολή κλειδιών, πρόσβαση τεχνικού ή εγγραφή binding.</p>
 <div class="tool-lock">ΔΕΝ αποτελεί ανεξάρτητη απόδειξη του πραγματικού MeshCentral Node ID. Ο Broker πρέπει να επαληθεύσει ξεχωριστά την επανασύνδεση της ίδιας συσκευής.</div>
 <div class="mini-grid"><div><span>Local evidence</span><strong>{esc(evidence['stage'])}</strong></div>
@@ -6172,6 +6448,29 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 <div><span>Binding write</span><strong>OFF</strong></div>
 <div><span>MeshAgent / unattended runtime</span><strong>OFF</strong></div></div>
 <p>Επόμενο checkpoint: ξεχωριστή περιορισμένη reuse-only εκτέλεση με live Broker/MeshCentral επιβεβαίωση. Καμία ενέργεια δεν εκτελείται από αυτή την κάρτα.</p>
+</section>"""
+
+    reuse_proof_html=''
+    if identity is not None and VERSION=='3.19.9' and identity.get('installation_id')=='ID-56674':
+        reuse=load_reuse_proof_state()
+        attempted=REUSE_PROOF_ATTEMPT_FILE.exists()
+        ready=assisted_local_reuse_evidence(identity)['stage']=='LOCAL_REUSE_EVIDENCE_READY'
+        disabled=' disabled' if (attempted or not ready or REUSE_PROOF_WORKER_ACTIVE) else ''
+        reuse_proof_html=f"""<section class="pairbox operational-card">
+<div class="section-heading"><div><div class="eyebrow">CONTROLLED · ONE SHOT · 3.19.9</div><h2>Proof of same native MeshCentral node · ID-56674</h2></div></div>
+<p>Απαιτεί προηγούμενο Admin ARM στον Broker 0.60.45. Θα επανεκκινήσει για ≤45″ ΜΟΝΟ το υπάρχον meshagent.db, χωρίς -install, service, technician permissions, automatic reconnect ή binding.</p>
+<div class="tool-lock">Αυτό δεν είναι το τελικό κουμπί Managed ενεργοποίησης. Μία προσπάθεια· καμία αυτόματη επανάληψη ακόμη και αν αποτύχει. Το First Seed receipt παραμένει ξεχωριστό.</div>
+<div class="mini-grid"><div><span>Τοπική ετοιμότητα</span><strong>{'READY' if ready else 'BLOCKED'}</strong></div>
+<div><span>One-shot attempt</span><strong>{'LATCHED' if attempted else 'NOT STARTED'}</strong></div>
+<div><span>Canary status</span><strong>{esc(reuse.get('status') or 'NOT RUN')}</strong></div>
+<div><span>Result</span><strong>{esc(reuse.get('result_code') or '—')}</strong></div>
+<div><span>Identity mode</span><strong>{esc(reuse.get('identity_mode') or '—')}</strong></div>
+<div><span>Identity DB persisted</span><strong>{'YES' if reuse.get('identity_db_persisted') else '—'}</strong></div>
+<div><span>Runtime cleanup</span><strong>{'YES' if reuse.get('runtime_directory_deleted') else '—'}</strong></div>
+<div><span>Binding write</span><strong>OFF</strong></div></div>
+<form method="post" action="assisted-reuse-proof"><input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
+<label><input type="checkbox" name="confirm_reuse_proof" value="ID-56674" required{disabled} style="width:auto;margin-right:8px">Επιβεβαιώνω μία μοναδική περιορισμένη επαναχρησιμοποίηση του ίδιου MeshAgent.</label>
+<button type="submit"{disabled}>Start ≤45″ reuse-only proof</button></form>
 </section>"""
 
     if identity is not None:
@@ -6803,6 +7102,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 {pair_html}
 {first_seed_html}
 {local_evidence_html}
+{reuse_proof_html}
 {persistent_html.replace('class="pairbox"', 'class="pairbox operational-card"', 1) if persistent_html else ''}
 {diagnostics_section}
 {identity_section}
@@ -6985,7 +7285,7 @@ def stop_router_compatibility():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SmartProManaged/3.19.8"
+    server_version = "SmartProManaged/3.19.9"
 
     def _send(self, code, body, content_type):
         data = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -7078,6 +7378,7 @@ class Handler(BaseHTTPRequestHandler):
         is_agent = path.endswith("/agent-check") or path == "agent-check"
         is_runtime = path.endswith("/runtime-lease-check") or path == "runtime-lease-check"
         is_canary = path.endswith("/identity-continuity-canary") or path == "identity-continuity-canary"
+        is_reuse_proof = path.endswith("/assisted-reuse-proof") or path == "assisted-reuse-proof"
         is_persistent_start = path.endswith("/continuous-runtime-start") or path == "continuous-runtime-start"
         is_persistent_stop = path.endswith("/continuous-runtime-stop") or path == "continuous-runtime-stop"
         is_group_migration_preflight = path.endswith("/group-migration-preflight") or path == "group-migration-preflight"
@@ -7086,7 +7387,7 @@ class Handler(BaseHTTPRequestHandler):
         is_group_identity_reseed_canary = path.endswith("/group-identity-reseed-canary") or path == "group-identity-reseed-canary"
         is_candidate_reconnect_canary = path.endswith("/candidate-reconnect-canary") or path == "candidate-reconnect-canary"
         is_candidate_promotion = path.endswith("/candidate-promotion") or path == "candidate-promotion"
-        if not is_pair and not is_first_seed and not is_enrollment and not is_settings and not is_first_device_settings and not is_first_device_execution and not is_first_device_retry_reset and not is_agent and not is_runtime and not is_canary and not is_persistent_start and not is_persistent_stop and not is_group_migration_preflight and not is_group_migration_target_settings and not is_group_migration_canary and not is_group_identity_reseed_canary and not is_candidate_reconnect_canary and not is_candidate_promotion:
+        if not is_reuse_proof and not is_pair and not is_first_seed and not is_enrollment and not is_settings and not is_first_device_settings and not is_first_device_execution and not is_first_device_retry_reset and not is_agent and not is_runtime and not is_canary and not is_persistent_start and not is_persistent_stop and not is_group_migration_preflight and not is_group_migration_target_settings and not is_group_migration_canary and not is_group_identity_reseed_canary and not is_candidate_reconnect_canary and not is_candidate_promotion:
             self._send(404, "Not found", "text/plain; charset=utf-8")
             return
         length = _as_int(self.headers.get("Content-Length")) or 0
@@ -7105,14 +7406,24 @@ class Handler(BaseHTTPRequestHandler):
         if VERSION == FIRST_DEVICE_EXECUTION_VERSION and not (is_first_device_execution or is_first_device_retry_reset):
             self._send(409, render_page(read_policy(), "Η 3.17.4 είναι κλειδωμένο controlled retry/reset checkpoint. Επιτρέπονται μόνο reset consume και αργότερα explicit armed first-device execution.", "bad"), "text/html; charset=utf-8")
             return
-        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop or (ASSISTED_INITIAL_PAIRING_ENABLED and is_pair) or ((FIRST_SEED_PILOT_ENABLED or assisted_first_seed_scope()) and is_first_seed)):
+        if STABLE_POST_ACTIONS_ONLY and not (is_persistent_start or is_persistent_stop or (ASSISTED_INITIAL_PAIRING_ENABLED and is_pair) or ((FIRST_SEED_PILOT_ENABLED or assisted_first_seed_scope()) and is_first_seed) or (is_reuse_proof and VERSION=='3.19.9')):
             self._send(409, render_page(read_policy(), "Η stable Managed λειτουργία επιτρέπει μόνο ρητή ενεργοποίηση ή παύση της μόνιμης σύνδεσης. Οι παλιές mutation/test ενέργειες παραμένουν κλειδωμένες, ανεξάρτητα από την έκδοση.", "bad"), "text/html; charset=utf-8")
             return
         if PERSISTENT_WORKER_ACTIVE and not (is_persistent_stop or is_group_migration_preflight or is_group_migration_target_settings or is_group_migration_canary or is_group_identity_reseed_canary or is_candidate_reconnect_canary or is_candidate_promotion):
             self._send(409, render_page(read_policy(), "Η continuous Managed λειτουργία είναι ενεργή. Επιτρέπονται μόνο ασφαλής τερματισμός ή οι verification-only migration έλεγχοι.", "bad"), "text/html; charset=utf-8")
             return
         if assisted_local_version() and (load_identity() or {}).get('installation_id') == ASSISTED_LOCAL_EVIDENCE_INSTALLATION and (is_first_seed or is_canary or is_persistent_start):
-            self._send(409, render_page(read_policy(), '3.19.8: First Seed, continuity canary και unattended runtime παραμένουν κλειδωμένα. Μόνο read-only evidence.', 'bad'), 'text/html; charset=utf-8')
+            self._send(409, render_page(read_policy(), '3.19.9: First Seed, legacy continuity και unattended runtime παραμένουν κλειδωμένα. Μόνο ρητό reuse-only pilot.', 'bad'), 'text/html; charset=utf-8')
+            return
+        if is_reuse_proof:
+            if (form.get('confirm_reuse_proof') or [''])[0] != 'ID-56674':
+                self._send(409,render_page(read_policy(),'Απαιτείται ρητή επιβεβαίωση της ID-56674.','bad'),'text/html; charset=utf-8')
+                return
+            try:
+                start_assisted_reuse_proof()
+                self._send(202,render_page(read_policy(),'Ξεκίνησε η μοναδική reuse-only δοκιμή. Δεν ενεργοποιήθηκε unattended ή binding.','info'),'text/html; charset=utf-8')
+            except RuntimeError as exc:
+                self._send(409,render_page(read_policy(),str(exc).partition('|')[2] or 'Το reuse proof μπλοκαρίστηκε.','bad'),'text/html; charset=utf-8')
             return
         if is_first_seed:
             if (form.get('confirm_first_seed') or [''])[0] != (load_identity() or {}).get('installation_id'):
