@@ -10,6 +10,7 @@ SRC = ROOT / 'smart-pro-managed-support' / 'app.py'
 spec = importlib.util.spec_from_file_location('managed_assisted_3197', SRC)
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
+app.VERSION = '3.19.7'  # version-pinned regression of historic one-shot first-seed gate
 
 NODE = 'SPMN-' + 'A' * 32
 ID = {'installation_id': 'ID-56674', 'node_id': NODE, 'node_secret': 'fake'}
