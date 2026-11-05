@@ -1,3 +1,12 @@
+## 3.19.10 — General Manual Managed Reuse (5 Nov 2026)
+
+- One-time enablement of the existing persisted MeshAgent identity with the normal unattended supervisor and auto-boot.
+- New dedicated 3.19.10 target-only source path, authorized by the Broker per installation.
+- Does not reset or repeat the 3.19.9 one-shot proof and never seeds a new identity from this path.
+- Preserves previous stable /data identity and requires exact source/label/binding hash match before MeshAgent starts.
+- Existing older pilot behavior remains version-pinned. No automatic technician rights.
+- Candidate pending static/integration/live QA. Do not deploy until jointly reviewed.
+
 ## 3.19.9 — Single assisted reuse-only native-node observation pilot (2026-11-04)
 
 - Strictly scoped to ID-56674/amd64; requires one-shot Admin Broker ARM and preserved 3.19.7 seed evidence.

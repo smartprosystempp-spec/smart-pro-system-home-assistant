@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.9")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.10")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -2693,9 +2693,12 @@ def _execution_settings_material(identity):
     material = {'raw':raw,'fields':fields,'agent_label':agent_label,'sha256':sha,'bytes':len(raw)}
     assisted_first = assisted_first_seed_scope(identity)
     assisted_reuse = VERSION == '3.19.9' and identity['installation_id'] == 'ID-56674' and ARCH == 'amd64'
-    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first or assisted_reuse:
+    manual_general = VERSION == '3.19.10'
+    if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first or assisted_reuse or manual_general:
         expected_group = f"Smart Pro Managed — {identity['installation_id']}"
         if _safe_str(fields.get('MeshName'), 200) != expected_group:
+            if manual_general:
+                raise RuntimeError('manual_group_mismatch|Ο Broker δεν παρέδωσε το exact per-installation target group.')
             if assisted_first:
                 raise RuntimeError('assisted_seed_group_mismatch|Ο Broker δεν παρέδωσε το ακριβές verified per-installation MeshCentral group. Δεν επιτρέπεται shared fallback.')
             raise RuntimeError('direct_seed_group_mismatch|Ο Broker δεν παρέδωσε το επαληθευμένο per-installation MeshCentral group.')
@@ -2722,6 +2725,16 @@ def _persistent_settings_material(identity, persisted_identity):
     if source!='target':
         material=_execution_settings_material(identity)
         material['runtime_source']='shared'
+        return material
+    # General manual Managed 3.19.10: an explicitly approved stable target identity
+    # reuses its OWN exact per-installation settings. The legacy migration validator
+    # requires a preexisting binding, so it is NOT applicable to initial binding.
+    # Fresh verified Broker source + persisted identity hash prevent a new seed.
+    if VERSION == '3.19.10' and source == 'target':
+        material = _execution_settings_material(identity)
+        expected_group = f"Smart Pro Managed — {identity['installation_id']}"
+        if material.get('runtime_source') != 'target' or material.get('target_group_name') != expected_group:
+            raise RuntimeError('manual_target_settings_mismatch|Το exact target source δεν επαληθεύτηκε.')
         return material
     # Keep the existing server-side agent-binary prerequisite satisfied with a fresh
     # standard secure-settings consume, but never use the shared .msh for target execution.
@@ -7721,7 +7734,7 @@ if __name__ == "__main__":
         unattended_thread = threading.Thread(target=unattended_supervisor, name="managed-unattended-supervisor", daemon=True)
         unattended_thread.start()
         if STABLE_POST_ACTIONS_ONLY:
-            print("[managed] stable action gate: 3.19.8 local evidence is read-only, remote start locked for ID-56674; archived actions locked", flush=True)
+            print('[managed] stable action gate: manual Managed reuse supports existing verified identities; pilot actions remain locked', flush=True)
     else:
         print("[managed] 3.17.4 checkpoint lock: unattended supervisor NOT started; controlled retry reset requires explicit UI consume; execution still requires later Broker arm + UI action", flush=True)
     router_compat_started = False
