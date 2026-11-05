@@ -46,8 +46,8 @@ class TestManualGeneral(TestCase):
 
     def test_auto_boot_version_parity(self):
         cfg=(ROOT/'smart-pro-managed-support'/'config.yaml').read_text()
-        self.assertIn('version: "3.19.10"',cfg)
+        self.assertIn('version: "3.19.11"',cfg)
         self.assertIn('boot: auto',cfg)
-        self.assertIn('3.19.10',(ROOT/'smart-pro-managed-support'/'run.sh').read_text())
-        self.assertIn('3.19.10',(ROOT/'smart-pro-managed-support'/'Dockerfile').read_text())
-        self.assertIn('3.19.10',(ROOT/'.github'/'workflows'/'publish-managed-support.yml').read_text())
+        self.assertIn('3.19.11',(ROOT/'smart-pro-managed-support'/'run.sh').read_text())
+        self.assertIn('3.19.11',(ROOT/'smart-pro-managed-support'/'Dockerfile').read_text())
+        self.assertIn('3.19.11',(ROOT/'.github'/'workflows'/'publish-managed-support.yml').read_text())
