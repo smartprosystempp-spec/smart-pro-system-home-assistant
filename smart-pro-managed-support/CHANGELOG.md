@@ -1,3 +1,13 @@
+## 3.19.11 — General First MeshAgent Enrollment (Candidate, 5 Nov 2026)
+
+- Adds one-time, target-only First Seed to ALL syntactically valid, Portal-paired `ID-xxxxx` installations on amd64, without customer ID allow-lists.
+- Reuses the already tested first-identity canary with exact-group settings preflight, fail-closed authorization, atomic persisted one-shot attempt, no automatic retries, no unattended auto-start and no technician permissions.
+- Retains verified 3.19.10 continuous runtime and auto-reconnect; first-time seed never starts that runtime or creates a Broker/Portal binding.
+- Broker 0.60.47 required, and real first seed is allowed only when the canonical per-installation empty MeshCentral group and paid onboarding gate are READY.
+- To prevent a second seed after an uncertain outcome, a consumed attempt requires human review rather than reset or reinstall. Do not delete `/data` on update.
+- General amd64 candidate; aarch64 first-seed activation intentionally not enabled until separately QA-verified.
+- No changes to Portal, Guest/Temporary, MeshCentral technician permissions, or billing authority.
+
 ## 3.19.10 — General Manual Managed Reuse (5 Nov 2026)
 
 - One-time enablement of the existing persisted MeshAgent identity with the normal unattended supervisor and auto-boot.

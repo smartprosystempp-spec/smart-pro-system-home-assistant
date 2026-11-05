@@ -1,6 +1,6 @@
 name: "Smart Pro Managed Support"
 description: "Ασφαλής Managed υποστήριξη Smart Pro System με σταθερή ταυτότητα, αυτόματη επανασύνδεση και τεκμηριωμένα διαγνωστικά."
-version: "3.19.10"
+version: "3.19.11"
 slug: "smart_pro_managed_support"
 arch:
   - amd64

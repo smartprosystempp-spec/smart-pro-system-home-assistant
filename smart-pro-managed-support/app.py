@@ -141,6 +141,9 @@ FIRST_SEED_PILOT_INSTALLATION = "ID-28422"
 DIRECT_SEED_PILOT_INSTALLATION = "ID-86995"
 ASSISTED_FIRST_SEED_VERSION = "3.19.7"
 ASSISTED_FIRST_SEED_ENABLED = True
+# General, exact target-group first identity enrollment for every valid ID-xxxxx.
+# Version-pinned to avoid changing the already verified 3.19.10 reuse runtime.
+GENERAL_FIRST_SEED_VERSION = "3.19.11"
 # Legacy pilots retain their prior 3.19.6 code paths even in a local test import.
 
 FIRST_SEED_PILOT_ARCH = "amd64"
@@ -2693,7 +2696,7 @@ def _execution_settings_material(identity):
     material = {'raw':raw,'fields':fields,'agent_label':agent_label,'sha256':sha,'bytes':len(raw)}
     assisted_first = assisted_first_seed_scope(identity)
     assisted_reuse = VERSION == '3.19.9' and identity['installation_id'] == 'ID-56674' and ARCH == 'amd64'
-    manual_general = VERSION == '3.19.10'
+    manual_general = VERSION in ('3.19.10', GENERAL_FIRST_SEED_VERSION)
     if identity['installation_id'] == DIRECT_SEED_PILOT_INSTALLATION or assisted_first or assisted_reuse or manual_general:
         expected_group = f"Smart Pro Managed — {identity['installation_id']}"
         if _safe_str(fields.get('MeshName'), 200) != expected_group:
@@ -3531,12 +3534,16 @@ def start_assisted_reuse_proof():
 
 
 def assisted_first_seed_scope(identity=None):
-    """Strict new-installation target-only scope; do not change legacy pilot behavior."""
-    if not ASSISTED_FIRST_SEED_ENABLED or VERSION != ASSISTED_FIRST_SEED_VERSION:
+    """Target-only one-time seed: general in 3.19.11, original pilots unchanged."""
+    if not ASSISTED_FIRST_SEED_ENABLED:
         return False
     identity = identity if identity is not None else load_identity()
     installation = _safe_str((identity or {}).get('installation_id'), 100).upper()
-    return (re.fullmatch(r'ID-[0-9]{5}', installation) is not None
+    if re.fullmatch(r'ID-[0-9]{5}', installation) is None:
+        return False
+    if VERSION == GENERAL_FIRST_SEED_VERSION:
+        return True  # No installation-specific allow-list in the new contract.
+    return (VERSION == ASSISTED_FIRST_SEED_VERSION
             and installation not in (FIRST_SEED_PILOT_INSTALLATION, DIRECT_SEED_PILOT_INSTALLATION))
 
 
@@ -6439,7 +6446,7 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 <div class="mini-grid"><div><span>Έλεγχος</span><strong>{esc(attempt_label)}</strong></div><div><span>Εγκατάσταση</span><strong>{esc(scope_id)} · amd64</strong></div><div><span>Automatic Managed</span><strong>OFF έως νέα εντολή</strong></div></div>
 <form method="post" action="first-identity-enrollment">
 <input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
-<label><input type="checkbox" name="confirm_first_seed" value="{esc(scope_id)}" required{seed_disabled} style="width:auto;max-width:none;margin-right:8px">Επιβεβαιώνω μία μοναδική δοκιμή πρώτης MeshAgent identity για {esc(scope_id)} και ότι δεν υπάρχει αυτόματη επανάληψη.</label>
+<label><input type="checkbox" name="confirm_first_seed" value="{esc(scope_id)}" required{seed_disabled} style="width:auto;max-width:none;margin-right:8px">Επιβεβαιώνω τη μοναδική πρώτη δημιουργία MeshAgent για {esc(scope_id)}. Δεν θα γίνει αυτόματη επανάληψη σε αποτυχία.</label>
 <button type="submit"{seed_disabled}>Έναρξη πρώτης δημιουργίας identity (≤45″)</button>
 </form></section>'''
 
@@ -7440,7 +7447,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if is_first_seed:
             if (form.get('confirm_first_seed') or [''])[0] != (load_identity() or {}).get('installation_id'):
-                self._send(409, render_page(read_policy(), "Απαιτείται ρητή επιβεβαίωση της ακριβούς πιλοτικής εγκατάστασης.", "bad"), "text/html; charset=utf-8")
+                self._send(409, render_page(read_policy(), "Απαιτείται ρητή επιβεβαίωση της ακριβούς εγκατάστασης.", "bad"), "text/html; charset=utf-8")
                 return
             try:
                 request_first_seed_pilot()
