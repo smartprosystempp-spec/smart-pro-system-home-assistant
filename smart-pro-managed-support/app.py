@@ -7207,41 +7207,41 @@ value="{esc(scope_id)}" required{seed_disabled}>
 :root{{color-scheme:dark}}*{{box-sizing:border-box}}body{{margin:0;background:#10151d;color:#eef5ff;font:14px/1.5 Arial,Helvetica,sans-serif}}main{{max-width:1040px;margin:0 auto;padding:24px}}.hero{{background:#172231;border:1px solid #2c4158;border-radius:16px;padding:22px;margin-bottom:16px}}h1{{margin:0 0 5px;font-size:27px}}h2{{margin:0 0 10px;font-size:18px}}.sub{{color:#aab9ca}}.badge{{display:inline-block;margin-top:14px;padding:8px 12px;border-radius:999px;font-weight:700}}.ok{{background:#173a2a;color:#9ff0bd;border:1px solid #2c7750}}.bad{{background:#442128;color:#ffb5c0;border:1px solid #8c3d4d}}.warn{{background:#43381a;color:#ffe49a;border:1px solid #8b7331}}.note{{margin-top:15px;padding:13px 15px;border-radius:10px;background:#12293a;border:1px solid #245473;color:#cfeeff}}.notice{{margin:0 0 16px;padding:12px 14px;border-radius:10px}}.notice-ok{{background:#173a2a;border:1px solid #2c7750;color:#bdf7d0}}.notice-bad{{background:#442128;border:1px solid #8c3d4d;color:#ffd0d6}}.notice-info{{background:#12293a;border:1px solid #245473;color:#cfeeff}}.grid,.status-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.card,.pairbox,.current-state{{background:#171d26;border:1px solid #293646;border-radius:12px;padding:15px}}.current-state{{margin:16px 0;padding:18px}}.section-heading{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}}.eyebrow{{font-size:11px;text-transform:uppercase;letter-spacing:.75px;color:#8fa1b5;margin-bottom:3px}}.version-chip{{white-space:nowrap;padding:6px 9px;border-radius:999px;background:#111821;border:1px solid #304258;color:#b8c9da;font-size:12px}}.k{{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#8fa1b5}}.v{{font-size:15px;font-weight:700;margin-top:4px;overflow-wrap:anywhere}}.pairbox{{margin:14px 0}}.operational-card{{border-color:#2c7750;box-shadow:0 0 0 1px rgba(44,119,80,.12)}}.pairbox p{{color:#b7c5d5}}.status-pill{{white-space:nowrap;padding:6px 9px;border-radius:999px;font-size:12px;font-weight:700}}.status-on{{background:#173a2a;color:#9ff0bd;border:1px solid #2c7750}}.status-paused{{background:#43381a;color:#ffe49a;border:1px solid #8b7331}}.runtime-actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}}.runtime-actions form{{margin:0}}.runtime-actions button{{margin-top:0}}.action-primary{{background:#19aee8;color:#06131b}}.action-pause{{background:#8a651f;color:#fff1bd}}.runtime-tech{{margin-top:14px;border-top:1px solid #293646;padding-top:12px}}.runtime-tech>summary{{cursor:pointer;font-weight:800;color:#c9d9e8;list-style:none}}.runtime-tech>summary::-webkit-details-marker{{display:none}}.runtime-tech>summary:after{{content:' ＋';color:#8fa1b5}}.runtime-tech[open]>summary:after{{content:' −'}}label{{display:block;font-weight:700;margin:12px 0 6px}}input{{width:100%;max-width:460px;padding:11px 12px;border-radius:8px;border:1px solid #3b4c60;background:#0f151d;color:#fff;font:inherit}}button{{display:block;margin-top:12px;border:0;border-radius:8px;padding:10px 14px;background:#19aee8;color:#06131b;font-weight:800;cursor:pointer}}button:disabled,input:disabled{{opacity:.5;cursor:not-allowed}}code{{color:#9fdfff}}.mini-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}}.mini-grid div{{background:#111821;border:1px solid #28384a;border-radius:9px;padding:10px}}.mini-grid span{{display:block;color:#8fa1b5;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}}.mini-grid strong{{overflow-wrap:anywhere}}.next-action{{margin-top:14px;padding:12px 14px;border-radius:10px;background:#12293a;border:1px solid #245473}}.next-action span{{display:block;color:#8fa1b5;font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}}.tool-section{{margin:14px 0;border:1px solid #293646;border-radius:12px;background:#141b24;overflow:hidden}}.tool-section>summary{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;cursor:pointer;font-weight:800;list-style:none}}.tool-section>summary::-webkit-details-marker{{display:none}}.tool-section>summary:after{{content:'＋';font-size:18px;color:#8fa1b5}}.tool-section[open]>summary:after{{content:'−'}}.tool-section>summary small{{margin-left:auto;color:#8fa1b5;font-weight:600;font-size:11px}}.section-intro{{padding:0 16px 14px;color:#9eb0c4;border-bottom:1px solid #253444}}.section-body{{padding:2px 14px 14px}}.tool-guide{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 12px;padding:10px;border-radius:9px;background:#101720;border:1px solid #27384a}}.tool-guide div{{min-width:0}}.tool-guide-wide{{grid-column:1/-1}}.tool-guide span{{display:block;color:#7f91a6;font-size:10px;text-transform:uppercase;letter-spacing:.55px;margin-bottom:2px}}.tool-guide strong{{display:block;color:#c8d5e3;font-size:12px;font-weight:650;overflow-wrap:anywhere}}.tool-lock{{margin:8px 0 12px;padding:9px 11px;border-radius:8px;background:#362f18;border:1px solid #6d5c26;color:#ffe49a;font-size:12px}}.archive-banner{{margin:16px 0;padding:12px 14px;border-radius:10px;background:#181f29;border:1px solid #34465a;color:#b8c7d7}}.footer{{margin-top:18px;color:#7f91a6;font-size:12px}}@media(max-width:650px){{main{{padding:14px}}.grid,.status-grid,.mini-grid,.tool-guide{{grid-template-columns:1fr}}.tool-guide-wide{{grid-column:auto}}.section-heading{{display:block}}.version-chip{{display:inline-block;margin-top:8px}}.tool-section>summary{{align-items:flex-start;flex-wrap:wrap}}.tool-section>summary small{{width:100%;margin:2px 0 0}}.runtime-actions{{display:block}}.runtime-actions form+form{{margin-top:8px}}}}
 
 /* Guided customer activation: compact responsive interface, no UI-only success state. */
-body{background:radial-gradient(ellipse at top right,#102b40 0,#0d1521 45%,#0b111b 100%);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{max-width:980px;padding:18px}
-.hero{padding:18px 20px;background:linear-gradient(125deg,#142333,#122b3d);border-color:#2b536a}
-.hero h1{font-size:23px}.hero .note{display:none}.hero .badge{margin-top:8px}
-.guide-shell{margin:14px 0;border:1px solid #376b87;background:linear-gradient(150deg,#162536,#121a29 65%);border-radius:17px;overflow:hidden;box-shadow:0 12px 40px #0002}
-.guide-top{padding:22px 23px;background:linear-gradient(110deg,#183b54,#113348 73%,#134955);display:flex;gap:14px;justify-content:space-between;align-items:flex-start}
-.guide-top h2{font-size:24px;margin:3px 0 6px}.guide-sub{color:#c3deec;margin:0;max-width:680px}
-.guide-eyebrow{text-transform:uppercase;letter-spacing:1.1px;color:#7bdffc;font-size:10px;font-weight:800}
-.guide-status{border:1px solid #3a9fba;background:#11516b;color:#b8f6ff;border-radius:100px;padding:6px 12px;white-space:nowrap;font-size:12px;font-weight:800}
-.guide-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:15px 19px;border-bottom:1px solid #2c3e50}
-.guide-step{display:flex;align-items:center;gap:9px;font-weight:650;font-size:12px;color:#8c9eae;min-width:0}
-.guide-number{display:grid;place-items:center;flex:0 0 30px;height:30px;border:1px solid #617389;border-radius:50%;background:#253448;font-size:14px}
-.guide-step.done{color:#a2eed0}.guide-step.done .guide-number{background:#195f45;border-color:#4ccf98;color:#b5ffe0}
-.guide-step.current{color:#edfbff}.guide-step.current .guide-number{background:#1ac6ea;border-color:#6de9ff;color:#092334}
-.guide-content{padding:19px 23px 22px}.guide-content h3{font-size:20px;margin:3px 0 12px;letter-spacing:-.3px}
-.guide-content p{margin:9px 0 14px;color:#c3d5e5}
-.guide-panel{padding:2px 0 0}.guide-panel .guide-eyebrow{color:#a6b8c9}
-.guide-hint{color:#a9c5d8;font-size:13px;margin:10px 0;padding:9px 12px;border-left:2px solid #39cbe8;background:#102e41;border-radius:4px}
-.guide-wait,.guide-success{border-radius:11px;border:1px solid #38607a;background:#132e43;padding:14px;color:#d3edfb}
-.guide-success{background:#153d30;border-color:#367e5a;color:#b7f8d3}
-.guide-pair{margin-top:12px;max-width:530px}.guide-pair form{margin:0}
-.guide-pair label{font-size:13px;color:#e1f5ff}.guide-pair input{max-width:530px}
-.guide-button{background:linear-gradient(110deg,#36d9f5,#13abe1);border-radius:10px;padding:12px 18px;font-size:14px;color:#061a25;box-shadow:0 4px 20px #0de3ff1f}
-.guide-button:disabled{background:#426578;color:#d0dee8;box-shadow:none}
-.guide-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.5;font-weight:500;color:#dae9f6;margin:14px 0}
-.guide-confirm input{width:18px;height:18px;flex:0 0 auto;margin:2px 0 0}
-.guide-foot{border-top:1px solid #2a4355;padding:11px 23px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;color:#91aebd;font-size:11px}
-.customer-advanced{margin:12px 0 16px;border:1px solid #32475b;border-radius:12px;background:#121c2a;overflow:hidden}
-.customer-advanced>summary{padding:14px 18px;font-weight:700;cursor:pointer;list-style:none;color:#d9e7f5}
-.customer-advanced>summary:after{content:" ＋";color:#79a9bd}.customer-advanced[open]>summary:after{content:" −"}
-.customer-advanced>summary::-webkit-details-marker{display:none}
-.customer-advanced-body{padding:0 14px 16px}
-.customer-advanced-body .guide-seed{display:none}
-@media(max-width:700px){main{padding:10px}.hero{padding:14px}.hero h1{font-size:20px}.guide-top{padding:16px;display:block}.guide-status{display:inline-block;margin-top:10px}.guide-top h2{font-size:21px}.guide-steps{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:15px}.guide-content{padding:16px}.guide-content h3{font-size:19px}.guide-foot{padding:11px 16px}}
-@media(max-width:420px){.guide-step{font-size:11px}.guide-number{flex-basis:26px;height:26px}.hero .sub{font-size:12px}}
+body{{background:radial-gradient(ellipse at top right,#102b40 0,#0d1521 45%,#0b111b 100%);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}
+main{{max-width:980px;padding:18px}}
+.hero{{padding:18px 20px;background:linear-gradient(125deg,#142333,#122b3d);border-color:#2b536a}}
+.hero h1{{font-size:23px}}.hero .note{{display:none}}.hero .badge{{margin-top:8px}}
+.guide-shell{{margin:14px 0;border:1px solid #376b87;background:linear-gradient(150deg,#162536,#121a29 65%);border-radius:17px;overflow:hidden;box-shadow:0 12px 40px #0002}}
+.guide-top{{padding:22px 23px;background:linear-gradient(110deg,#183b54,#113348 73%,#134955);display:flex;gap:14px;justify-content:space-between;align-items:flex-start}}
+.guide-top h2{{font-size:24px;margin:3px 0 6px}}.guide-sub{{color:#c3deec;margin:0;max-width:680px}}
+.guide-eyebrow{{text-transform:uppercase;letter-spacing:1.1px;color:#7bdffc;font-size:10px;font-weight:800}}
+.guide-status{{border:1px solid #3a9fba;background:#11516b;color:#b8f6ff;border-radius:100px;padding:6px 12px;white-space:nowrap;font-size:12px;font-weight:800}}
+.guide-steps{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:15px 19px;border-bottom:1px solid #2c3e50}}
+.guide-step{{display:flex;align-items:center;gap:9px;font-weight:650;font-size:12px;color:#8c9eae;min-width:0}}
+.guide-number{{display:grid;place-items:center;flex:0 0 30px;height:30px;border:1px solid #617389;border-radius:50%;background:#253448;font-size:14px}}
+.guide-step.done{{color:#a2eed0}}.guide-step.done .guide-number{{background:#195f45;border-color:#4ccf98;color:#b5ffe0}}
+.guide-step.current{{color:#edfbff}}.guide-step.current .guide-number{{background:#1ac6ea;border-color:#6de9ff;color:#092334}}
+.guide-content{{padding:19px 23px 22px}}.guide-content h3{{font-size:20px;margin:3px 0 12px;letter-spacing:-.3px}}
+.guide-content p{{margin:9px 0 14px;color:#c3d5e5}}
+.guide-panel{{padding:2px 0 0}}.guide-panel .guide-eyebrow{{color:#a6b8c9}}
+.guide-hint{{color:#a9c5d8;font-size:13px;margin:10px 0;padding:9px 12px;border-left:2px solid #39cbe8;background:#102e41;border-radius:4px}}
+.guide-wait,.guide-success{{border-radius:11px;border:1px solid #38607a;background:#132e43;padding:14px;color:#d3edfb}}
+.guide-success{{background:#153d30;border-color:#367e5a;color:#b7f8d3}}
+.guide-pair{{margin-top:12px;max-width:530px}}.guide-pair form{{margin:0}}
+.guide-pair label{{font-size:13px;color:#e1f5ff}}.guide-pair input{{max-width:530px}}
+.guide-button{{background:linear-gradient(110deg,#36d9f5,#13abe1);border-radius:10px;padding:12px 18px;font-size:14px;color:#061a25;box-shadow:0 4px 20px #0de3ff1f}}
+.guide-button:disabled{{background:#426578;color:#d0dee8;box-shadow:none}}
+.guide-confirm{{display:flex;gap:10px;align-items:flex-start;line-height:1.5;font-weight:500;color:#dae9f6;margin:14px 0}}
+.guide-confirm input{{width:18px;height:18px;flex:0 0 auto;margin:2px 0 0}}
+.guide-foot{{border-top:1px solid #2a4355;padding:11px 23px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;color:#91aebd;font-size:11px}}
+.customer-advanced{{margin:12px 0 16px;border:1px solid #32475b;border-radius:12px;background:#121c2a;overflow:hidden}}
+.customer-advanced>summary{{padding:14px 18px;font-weight:700;cursor:pointer;list-style:none;color:#d9e7f5}}
+.customer-advanced>summary:after{{content:" ＋";color:#79a9bd}}.customer-advanced[open]>summary:after{{content:" −"}}
+.customer-advanced>summary::-webkit-details-marker{{display:none}}
+.customer-advanced-body{{padding:0 14px 16px}}
+.customer-advanced-body .guide-seed{{display:none}}
+@media(max-width:700px){{main{{padding:10px}}.hero{{padding:14px}}.hero h1{{font-size:20px}}.guide-top{{padding:16px;display:block}}.guide-status{{display:inline-block;margin-top:10px}}.guide-top h2{{font-size:21px}}.guide-steps{{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:15px}}.guide-content{{padding:16px}}.guide-content h3{{font-size:19px}}.guide-foot{{padding:11px 16px}}}}
+@media(max-width:420px){{.guide-step{{font-size:11px}}.guide-number{{flex-basis:26px;height:26px}}.hero .sub{{font-size:12px}}}}
 
 </style></head><body><main>
 <section class="hero"><h1>Smart Pro Managed Support</h1><div class="sub">v{esc(VERSION)} · Ασφαλής Managed υποστήριξη · {esc(ARCH)}</div><span class="badge {badge_class}">{esc(badge)}</span><div class="note">{esc(reason)}</div></section>
