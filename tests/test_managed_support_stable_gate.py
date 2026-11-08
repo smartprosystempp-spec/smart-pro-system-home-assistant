@@ -91,9 +91,10 @@ app._serve_until_shutdown(server)
             self.assertEqual(invoke("candidate-promotion"), [409])
 
 
-    def test_pairing_ui_is_always_locked_in_stable_source(self):
+    def test_pairing_ui_respects_assisted_pairing_and_local_gate(self):
         source = SOURCE.read_text(encoding="utf-8")
-        self.assertIn("activation_locked = STABLE_POST_ACTIONS_ONLY and not ASSISTED_INITIAL_PAIRING_ENABLED", source)
+        self.assertIn('disabled = "" if local_allowed and ASSISTED_INITIAL_PAIRING_ENABLED else " disabled"', source)
+        self.assertIn('if load_identity() is not None:', source)
         self.assertNotIn("activation_locked = VERSION ==", source)
 
 
