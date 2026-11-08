@@ -1,3 +1,12 @@
+## 3.19.12 — Guided Customer Activation UI (Draft, 8 Nov 2026)
+
+- Replaces the customer landing screen with one compact, tablet-friendly guided activation card driven by existing local policy, paired identity, First Seed state and live persistent runtime.
+- Uses established one-time pairing, First Seed and runtime-start POST handlers. Does not introduce new server writers or automatic MeshCentral provisioning.
+- Displays only the applicable next customer action, with explicit advice to obtain the one-time 15-minute code from Customer Portal after Smart Pro System preparation/approval. No unverified direct deep link is invented.
+- Keeps the operational and historical technical views collapsed under one advanced disclosure.
+- Preserves general 3.19.11 exact per-installation target group/First Seed and verified runtime reuse gates when bumping to 3.19.12.
+- Draft branch only: automated syntax + stable POST regression passed. Not merged, published or installed; customer tablet visual QA and a clean first-installation end-to-end test remain required.
+
 ## 3.19.11 — General First MeshAgent Enrollment (Candidate, 5 Nov 2026)
 
 - Adds one-time, target-only First Seed to ALL syntactically valid, Portal-paired `ID-xxxxx` installations on amd64, without customer ID allow-lists.
