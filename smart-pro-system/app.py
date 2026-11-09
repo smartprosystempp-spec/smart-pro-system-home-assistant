@@ -27,6 +27,10 @@ import secrets
 import ipaddress
 import math
 from pathlib import Path
+from sps_http_security import (
+    ingress_user, is_json_browser_post, STATIC_FILES, STATIC_CONTENT_TYPES,
+    OneShotIntent, legacy_subscription_expected, validate_public_settings_patch,
+)
 
 PORT = 8099
 OFFLINE_DEVICES = {}
@@ -7623,7 +7627,57 @@ def watchdog_loop():
             update_guardian_status(status='error', reason_code='guardian_loop_error', last_error_at=error_at)
             print(f'[GUARDIAN] Loop error: {error}', flush=True)
 
+PORTAL_DISCONNECT_INTENTS = OneShotIntent()
+
+
+def _portal_disconnect_binding():
+    connection = load_portal_connection()
+    token = str(connection.get('installation_token') or '')
+    inst = str(connection.get('installation_id') or '')
+    if not token or not inst:
+        return ''
+    return inst + ':' + hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
 class MyHandler(http.server.SimpleHTTPRequestHandler):
+    # The image contains server-side code and Supervisor credentials in /data.
+    # Static assets are an explicit list, never a filesystem-derived URL path.
+    static_root = Path('/')
+
+    def _sps_ingress_user(self):
+        identity = ingress_user(self)
+        if not identity:
+            send_json(self, 403, {'status':'error','code':'trusted_ingress_required'})
+        return identity
+
+    def _sps_serve_static(self, path, head=False):
+        if path not in STATIC_FILES:
+            # HEAD responses must not include a JSON body or disclose file metadata.
+            if head:
+                self.send_response(404)
+                self.send_header('Content-Length','0')
+                self.end_headers()
+            else:
+                send_json(self, 404, {'status':'error','code':'route_not_found'})
+            return
+        name = 'index.html' if path == '/' else path[1:]
+        try:
+            payload = (self.static_root / name).read_bytes()
+        except OSError:
+            send_json(self, 404, {'status':'error','code':'asset_not_found'})
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', STATIC_CONTENT_TYPES[name])
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        if not head:
+            self.wfile.write(payload)
+
+    def do_HEAD(self):
+        if not self._sps_ingress_user():
+            return
+        self._sps_serve_static(urllib.parse.urlsplit(self.path).path, head=True)
+
     def end_headers(self):
         # Home Assistant Ingress/browser can otherwise retain an old index.html and
         # therefore keep loading an older script.js cache key after an add-on update.
@@ -7634,10 +7688,22 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             self.send_header('Pragma', 'no-cache')
             self.send_header('Expires', '0')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Referrer-Policy', 'no-referrer')
         super().end_headers()
 
     def do_GET(self):
         request_path = urllib.parse.urlparse(self.path).path
+        if not self._sps_ingress_user():
+            return
+        if request_path == '/api/portal_disconnect/intent':
+            binding = _portal_disconnect_binding()
+            if not binding:
+                send_json(self, 409, {'status':'error','code':'portal_not_paired'})
+            else:
+                intent = PORTAL_DISCONNECT_INTENTS.issue(ingress_user(self), binding)
+                send_json(self, 200, {'status':'ready','consent_token':intent,'expires_in':120})
+            return
         if request_path.endswith('/api/sp-customer-admin/status'):
             import sp_customer_admin_access as _customer_access
             _customer_access.status(self, load_portal_connection())
@@ -7733,9 +7799,21 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                         valid_ents.append({"id": eid, "name": fname})
                 self.send_response(200); self.send_header('Content-type', 'application/json'); self.end_headers(); self.wfile.write(json.dumps(valid_ents).encode())
             except Exception: self.send_response(500); self.end_headers()
-        else: super().do_GET() 
+        else: self._sps_serve_static(request_path)
 
     def do_POST(self):
+        if not self._sps_ingress_user():
+            return
+        if not is_json_browser_post(self.headers):
+            send_json(self, 415, {'status':'error','code':'json_same_origin_required'})
+            return
+        try:
+            declared_length = int(self.headers.get('Content-Length','0'))
+        except (TypeError,ValueError):
+            declared_length = 0
+        if not 1 <= declared_length <= 65536:
+            send_json(self, 413, {'status':'error','code':'request_size_rejected'})
+            return
         if urllib.parse.urlparse(self.path).path.endswith('/api/sp-customer-admin/action'):
             import sp_customer_admin_access as _customer_access
             _customer_access.action(self, load_portal_connection())
@@ -7771,9 +7849,20 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as error:
                 send_json(self, 400, {'status': 'error', 'code': 'invalid_request', 'message': str(error)})
         elif urllib.parse.urlparse(self.path).path.endswith('/api/portal_disconnect'):
+            try:
+                data = read_json_body(self, max_bytes=512)
+                if not isinstance(data,dict) or set(data) != {'consent_token'}:
+                    raise ValueError('invalid_disconnect_intent')
+            except (ValueError,TypeError):
+                send_json(self, 400, {'status':'error','code':'invalid_disconnect_intent'})
+                return
+            if not PORTAL_DISCONNECT_INTENTS.consume(ingress_user(self),
+                    _portal_disconnect_binding(), data.get('consent_token')):
+                send_json(self, 403, {'status':'error','code':'disconnect_approval_required'})
+                return
             clear_portal_connection()
             write_managed_policy_file()
-            send_json(self, 200, {'status': 'disconnected'})
+            send_json(self, 200, {'status':'disconnected'})
         elif self.path.endswith('/api/verify_pin'):
             try:
                 data = read_json_body(self)
@@ -7854,24 +7943,39 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                         'success': False,
                         'message': f'Η δοκιμή email απέτυχε: {clean_portal_error_message(error)}',
                     })
-        elif self.path.endswith('/api/set_subscription_status'):
-            content_length = int(self.headers['Content-Length']); data = json.loads(self.rfile.read(content_length))
-            tech_config = load_tech_settings(); tech_config['subscription_active'] = data.get('active', True); save_tech_settings(tech_config)
-            self.send_response(200); self.end_headers(); self.wfile.write(b'{"status":"success"}')
+        elif urllib.parse.urlparse(self.path).path.endswith('/api/set_subscription_status'):
+            # Kept for legacy unpaired browser compatibility. Browser-supplied
+            # 'active' is NOT an authority to enable a subscription service.
+            try:
+                data = read_json_body(self, max_bytes=128)
+                if not isinstance(data,dict) or set(data) != {'active'} or type(data['active']) is not bool:
+                    raise ValueError('invalid_legacy_request')
+            except (ValueError,TypeError):
+                send_json(self, 400, {'status':'error','code':'invalid_legacy_request'})
+                return
+            if load_portal_connection().get('installation_token'):
+                send_json(self, 409, {'status':'error','code':'portal_subscription_authoritative'})
+                return
+            settings = load_tech_settings()
+            derived = legacy_subscription_expected(settings)
+            if derived is None:
+                send_json(self, 409, {'status':'error','code':'legacy_subscription_unverified'})
+                return
+            if settings.get('subscription_active') is not derived:
+                save_tech_settings({'subscription_active':derived})
+            send_json(self, 200, {'status':'success','active':derived,'source':'legacy_local_derived'})
         elif urllib.parse.urlparse(self.path).path.endswith('/api/tech_settings'):
             try:
                 data = read_json_body(self)
                 if not isinstance(data, dict):
                     raise ValueError('Μη έγκυρα δεδομένα ρυθμίσεων.')
                 authorized = tech_session_authorized(self)
-                if not authorized:
-                    unexpected = set(data.keys()) - TECH_SETTINGS_PUBLIC_WRITE_KEYS
-                    if unexpected:
-                        send_json(self, 401, {
-                            'status': 'error',
-                            'message': 'Απαιτείται ενεργή τεχνική συνεδρία για αυτές τις ρυθμίσεις.',
-                        })
-                        return
+                if not authorized and not validate_public_settings_patch(data):
+                    send_json(self, 401, {
+                        'status': 'error',
+                        'message': 'Απαιτείται ενεργή τεχνική συνεδρία για αυτές τις ρυθμίσεις.',
+                    })
+                    return
                 # A blank password means "keep the existing secret". The browser
                 # never receives the stored password and therefore cannot echo it.
                 if 'email_password' in data and not str(data.get('email_password', '') or '').strip():

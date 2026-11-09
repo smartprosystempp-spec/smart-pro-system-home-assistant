@@ -686,8 +686,20 @@ async function pairWithPortal() {
 async function disconnectPortal() {
     if (!window.confirm('Να αποσυνδεθεί αυτή η εγκατάσταση από το Smart Pro Portal;')) return;
     try {
-        const response = await fetch(portalCurrentPath() + 'api/portal_disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        if (!response.ok) throw new Error('Η αποσύνδεση απέτυχε.');
+        // Server-issued, user/installation-bound and single-use disconnect intent.
+        // A browser confirm alone is not an authorization boundary.
+        const intentResponse = await fetch(portalCurrentPath() + 'api/portal_disconnect/intent', {
+            cache: 'no-store', credentials: 'same-origin'
+        });
+        if (!intentResponse.ok) throw new Error('Δεν επιβεβαιώθηκε η άδεια αποσύνδεσης. Δεν έγινε αλλαγή.');
+        const intent = await intentResponse.json();
+        if (!intent || !intent.consent_token) throw new Error('Η έγκριση αποσύνδεσης δεν είναι διαθέσιμη.');
+        const response = await fetch(portalCurrentPath() + 'api/portal_disconnect', {
+            method: 'POST', credentials: 'same-origin', cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ consent_token: intent.consent_token })
+        });
+        if (!response.ok) throw new Error('Η αποσύνδεση δεν επιβεβαιώθηκε. Ελέγξτε την τρέχουσα κατάσταση.');
         await loadPortalStatus();
         showToast('Η τοπική σύνδεση διαγράφηκε.');
     } catch (error) {

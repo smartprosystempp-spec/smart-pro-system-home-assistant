@@ -19,6 +19,7 @@ COPY sp_customer_admin_access.js /
 COPY ha_readback.py /
 COPY core_session_qa.py /
 COPY app.py /
+COPY sps_http_security.py /
 
 # Additive UI inclusion at build time: the original index.html and business
 # logic remain byte-identical in the repository; fail the build if not included.
