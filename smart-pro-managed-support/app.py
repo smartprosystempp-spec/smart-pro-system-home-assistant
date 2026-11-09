@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.14")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.15")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -143,7 +143,7 @@ ASSISTED_FIRST_SEED_VERSION = "3.19.7"
 ASSISTED_FIRST_SEED_ENABLED = True
 # General, exact target-group first identity enrollment for every valid ID-xxxxx.
 # Version-pinned to avoid changing the already verified 3.19.10 reuse runtime.
-GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12", "3.19.13", "3.19.14")
+GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12", "3.19.13", "3.19.14", "3.19.15")
 # Legacy pilots retain their prior 3.19.6 code paths even in a local test import.
 
 FIRST_SEED_PILOT_ARCH = "amd64"
@@ -153,7 +153,7 @@ MIN_AGENT_BYTES = 100000
 MAX_AGENT_BYTES = 67108864
 ELF_MACHINE = {"aarch64": 183, "amd64": 62}
 CSRF_TOKEN = secrets.token_urlsafe(24)
-UI_SCRIPT = "/* UI-only customer experience. No enrollment or privileged runtime changes. */\n(function () {\n  const code = document.getElementById('pairing_code');\n  const next = document.getElementById('managed_pair_continue');\n  if (code && next && !code.disabled) {\n    const validCode = /^SPM-[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){3}$/i;\n    const refresh = () => { next.disabled = !validCode.test(code.value.trim()); };\n    code.addEventListener('input', refresh);\n    code.addEventListener('change', refresh);\n    refresh();\n  }\n\n  const version = document.getElementById('managed_version_trigger');\n  const archive = document.getElementById('managed_technical_archive');\n  const closeArchive = document.getElementById('managed_archive_close');\n  let clicks = 0;\n  let lastClickAt = 0;\n  if (version && archive) {\n    version.addEventListener('click', function () {\n      const now = Date.now();\n      if (now - lastClickAt > 4500) clicks = 0;\n      lastClickAt = now;\n      clicks += 1;\n      if (clicks !== 7) return;\n      clicks = 0;\n      archive.hidden = false;\n      version.setAttribute('aria-expanded', 'true');\n      archive.scrollIntoView({ behavior: 'smooth', block: 'start' });\n    });\n  }\n  if (closeArchive && archive) {\n    closeArchive.addEventListener('click', function () {\n      archive.hidden = true;\n      if (version) version.setAttribute('aria-expanded', 'false');\n      clicks = 0;\n      if (version) version.focus();\n      window.scrollTo({ top: 0, behavior: 'smooth' });\n    });\n  }\n\n  const back = document.getElementById('managed_back_addons');\n  if (back) {\n    back.addEventListener('click', function (event) {\n      // Native Home Assistant ingress iframe navigation, not browser history.\n      if (window.parent !== window) {\n        event.preventDefault();\n        window.parent.postMessage({ type: 'home-assistant/navigate', path: '/hassio/dashboard' }, '*');\n      }\n      // The normal anchor provides a navigable fallback outside an ingress iframe.\n    });\n  }\n})();"
+UI_SCRIPT = "/* UI-only customer experience. No enrollment or privileged runtime changes. */\n(function () {\n  const code = document.getElementById('pairing_code');\n  const next = document.getElementById('managed_pair_continue');\n  if (code && next && !code.disabled) {\n    const validCode = /^SPM-[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){3}$/i;\n    const refresh = () => { next.disabled = !validCode.test(code.value.trim()); };\n    code.addEventListener('input', refresh);\n    code.addEventListener('change', refresh);\n    refresh();\n  }\n\n  const version = document.getElementById('managed_version_trigger');\n  const archive = document.getElementById('managed_technical_archive');\n  const closeArchive = document.getElementById('managed_archive_close');\n  let clicks = 0;\n  let lastClickAt = 0;\n  if (version && archive) {\n    version.addEventListener('click', function () {\n      const now = Date.now();\n      if (now - lastClickAt > 4500) clicks = 0;\n      lastClickAt = now;\n      clicks += 1;\n      if (clicks !== 7) return;\n      clicks = 0;\n      archive.hidden = false;\n      version.setAttribute('aria-expanded', 'true');\n      archive.scrollIntoView({ behavior: 'smooth', block: 'start' });\n    });\n  }\n  if (closeArchive && archive) {\n    closeArchive.addEventListener('click', function () {\n      archive.hidden = true;\n      if (version) version.setAttribute('aria-expanded', 'false');\n      clicks = 0;\n      if (version) version.focus();\n      window.scrollTo({ top: 0, behavior: 'smooth' });\n    });\n  }\n\n  const back = document.getElementById('managed_back_addons');\n  if (back) {\n    back.addEventListener('click', function (event) {\n      // Native Home Assistant ingress iframe navigation, not browser history.\n      if (window.parent !== window) {\n        event.preventDefault();\n        window.parent.postMessage({ type: 'home-assistant/navigate', path: '/config/apps/installed' }, '*');\n      }\n      // The normal anchor provides a navigable fallback outside an ingress iframe.\n    });\n  }\n})();"
 UI_SCRIPT_SHA256 = base64.b64encode(hashlib.sha256(UI_SCRIPT.encode("utf-8")).digest()).decode("ascii")
 
 STATE_LOCK = threading.RLock()
@@ -7274,7 +7274,7 @@ main{{max-width:980px;padding:18px}}
 @media(max-width:560px){{.hero-head{{flex-wrap:wrap}}.addons-return{{margin-top:2px}}.technical-archive-head{{align-items:flex-start;flex-wrap:wrap}}}}
 
 </style></head><body><main>
-<section class="hero"><div class="hero-head"><div><h1>Smart Pro Managed Support</h1><div class="sub"><button type="button" class="version-trigger" id="managed_version_trigger" aria-label="Έκδοση Smart Pro Managed Support" aria-controls="managed_technical_archive" aria-expanded="false">v{esc(VERSION)}</button> · Ασφαλής Managed υποστήριξη · {esc(ARCH)}</div></div><a class="addons-return" id="managed_back_addons" href="/hassio/dashboard" target="_top" rel="noopener" aria-label="Επιστροφή στα πρόσθετα Home Assistant">← Στα πρόσθετα</a></div><span class="badge {badge_class}">{esc(badge)}</span><div class="note">{esc(reason)}</div></section>
+<section class="hero"><div class="hero-head"><div><h1>Smart Pro Managed Support</h1><div class="sub"><button type="button" class="version-trigger" id="managed_version_trigger" aria-label="Έκδοση Smart Pro Managed Support" aria-controls="managed_technical_archive" aria-expanded="false">v{esc(VERSION)}</button> · Ασφαλής Managed υποστήριξη · {esc(ARCH)}</div></div><a class="addons-return" id="managed_back_addons" href="/config/apps/installed" target="_top" rel="noopener" aria-label="Επιστροφή στα πρόσθετα Home Assistant">← Στα πρόσθετα</a></div><span class="badge {badge_class}">{esc(badge)}</span><div class="note">{esc(reason)}</div></section>
 {notice_html}
 {guide_html}
 <section id="managed_technical_archive" class="technical-archive" hidden>

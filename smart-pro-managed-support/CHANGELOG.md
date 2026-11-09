@@ -1,3 +1,11 @@
+## 3.19.15 — Home Assistant Apps Back Navigation Hotfix (9 Nov 2026)
+
+- Fixes the «← Στα πρόσθετα» action: it now uses Home Assistant 2026 Apps route `/config/apps/installed` instead of obsolete `/hassio/dashboard` (which returned 404).
+- In Home Assistant ingress, sends `home-assistant/navigate` to the parent Home Assistant UI. The top-level link points to the same Apps route as fallback outside ingress.
+- No UI layout, seven-click diagnostics, visibility, runtime, pairing, First Seed, Node ID, authorization, or storage changes.
+- Keep Broker 0.60.61 installed before upgrading; older versions 3.19.11–3.19.14 remain valid.
+- Home Assistant live navigation confirmation pending.
+
 ## 3.19.14 — Discreet technician archive & Home Assistant return navigation (9 Nov 2026)
 
 - Removes the visible Technical Details disclosure from the normal customer screen; the historical archive opens only after seven consecutive clicks on the version text and can be closed again. No hidden button is shown.
