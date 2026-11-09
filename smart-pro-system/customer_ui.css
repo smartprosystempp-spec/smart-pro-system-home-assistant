@@ -1,0 +1,136 @@
+/* Smart Pro System 3.0.31 — Customer Dashboard tablet-first presentation.
+   Additive layer. Legacy technician/admin APIs and underlying status IDs unchanged. */
+body.sps-vnext.sps-customer-v1 {
+  color-scheme:dark;
+  --sps-v-bg:#0b121d;--sps-v-surface:#111e2d;--sps-v-stroke:#2c455b;
+  --sps-v-muted:#99b4c6;--sps-v-text:#edf6ff;--sps-v-accent:#58cdea;
+  background:radial-gradient(ellipse at 85% 0%,#133148 0%,#0c1521 47%,#090f18 100%);
+  color:var(--sps-v-text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  align-items:stretch;
+}
+.sps-customer-v1 .sps-shell {width:100%;max-width:1170px;padding:14px 18px 28px;margin:0 auto;}
+.sps-customer-v1 .sps-header {
+  margin:0 0 10px; padding:14px 18px; align-items:center; gap:12px;
+  border:1px solid #335972;border-radius:16px;
+  background:linear-gradient(115deg,#162739,#142d3f 70%,#103c49);
+  box-shadow:0 12px 40px #0002;
+}
+.sps-customer-v1 .sps-brand{gap:11px;min-width:0}
+.sps-customer-v1 .sps-brand-mark{width:44px;height:44px;border-radius:12px;box-shadow:none;background:linear-gradient(145deg,#2457a9,#18416a)}
+.sps-customer-v1 .sps-header h1{font-size:23px;letter-spacing:-.35px;margin:0 0 2px;color:#f0f7ff}
+.sps-customer-v1 .sps-header p{font-size:11px;line-height:1.35;color:#b2cada;margin:3px 0 0}
+.sps-customer-v1 .sps-eyebrow{margin-bottom:2px;font-size:9px;color:#7bdafa}
+.sps-customer-v1 .sps-header-actions{gap:7px;align-items:center;max-width:600px}
+.sps-customer-v1 .sps-action{min-height:34px;padding:7px 11px;border-radius:9px;font-size:11.5px;border-color:#37637d;background:#153247;color:#dcf3ff}
+.sps-customer-v1 .sps-action.primary{background:linear-gradient(115deg,#2780b4,#226e9d);border-color:#388db9}
+.sps-customer-v1 .sps-action:focus-visible,.sps-customer-v1 summary:focus-visible,.sps-customer-v1 .sps-modal-close:focus-visible{outline:2px solid #59dff6;outline-offset:3px}
+.sps-customer-v1 .sps-state-strip{grid-template-columns:1.35fr 1.1fr .9fr;gap:9px;margin:0}
+.sps-customer-v1 .sps-state-strip>.sps-mode{display:none}
+.sps-customer-v1 .sps-state-strip>.sps-installation-mini{order:1}
+.sps-customer-v1 .sps-state-strip>.sps-plan{order:2}
+.sps-customer-v1 .sps-state-strip>.sps-sync-mini{order:3}
+.sps-customer-v1 .sps-state-strip>div{min-height:71px;padding:11px 13px;background:#111e2d;border:1px solid #2e4b63;border-radius:11px}
+.sps-customer-v1 .sps-state-strip span,.sps-customer-v1 .sps-state-strip small{color:#9bb6ca;font-size:10.5px}
+.sps-customer-v1 .sps-state-strip strong,.sps-customer-v1 .sps-state-strip #uiCompactPlan{font-size:13px;color:#eef8ff;line-height:1.35}
+.sps-customer-v1 .sps-state-strip .sps-plan{border-left-width:3px!important}
+.sps-customer-v1 .sps-state-strip .sps-sync-mini strong[data-tone=good]{color:#77e7ae}
+.sps-customer-v1 .sps-state-strip .sps-sync-mini strong[data-tone=attention]{color:#f4c77a}
+.sps-customer-v1 .sps-state-strip .sps-sync-mini strong[data-tone=muted]{color:#aabaca}
+.sps-customer-v1 .sps-connection-details{margin:8px 0 0;border:1px solid #294359;border-radius:10px;background:#102030;overflow:hidden}
+.sps-customer-v1 .sps-connection-details>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 13px;color:#b0d5e9;font-size:11px;font-weight:700;list-style:none}
+.sps-customer-v1 .sps-connection-details>summary::-webkit-details-marker{display:none}
+.sps-customer-v1 .sps-connection-details>summary:after{content:'⌄';font-size:15px;color:#77cae9}
+.sps-customer-v1 .sps-connection-details[open]>summary:after{content:'⌃'}
+.sps-customer-v1 .sps-connection-details:not([open])>summary{padding:6px 13px}
+.sps-customer-v1 .sps-connection-details .sps-connection-card{margin:0;border:0;border-top:1px solid #294359;border-radius:0;background:#111f2c;box-shadow:none}
+.sps-customer-v1 .sps-connection-details:not([open]) .sps-connection-card{display:none}
+.sps-customer-v1 .sps-services,.sps-customer-v1 .sps-health,.sps-customer-v1 .sps-activity{margin:9px 0 0;background:linear-gradient(140deg,#132132,#101a29);border:1px solid #2d475e;border-radius:13px;box-shadow:none}
+.sps-customer-v1 .sps-services{padding:12px 14px 13px}
+.sps-customer-v1 .sps-section-heading{border-bottom:0;padding:0 2px 4px;align-items:baseline;gap:8px}
+.sps-customer-v1 .sps-section-heading h2{font-size:16px;color:#eff8ff;letter-spacing:-.2px}
+.sps-customer-v1 .sps-section-heading p{font-size:10px;max-width:240px;opacity:.8}
+.sps-customer-v1 .sps-service-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:7px 0 0}
+.sps-customer-v1 .sps-service-row{
+  display:grid;grid-template-columns:33px minmax(0,1fr) minmax(130px,.85fr);
+  grid-auto-rows:auto;align-items:center;gap:1px 10px;
+  min-width:0;min-height:79px;padding:10px 12px;
+  background:#101d2c;border:1px solid #2e455c;border-radius:10px;
+}
+.sps-customer-v1 .sps-service-row:last-child{border:1px solid #2e455c}
+.sps-customer-v1 .sps-service-icon{grid-column:1;grid-row:1 / span 2;width:32px;height:32px;border-radius:9px;color:#b9e5fd;background:#182e44;border-color:#345675}
+.sps-customer-v1 .sps-service-copy{grid-column:2;grid-row:1 / span 2;min-width:0}
+.sps-customer-v1 .sps-service-copy strong{font-size:12.5px;color:#eff7ff}
+.sps-customer-v1 .sps-service-copy span{color:#95b2c6;font-size:10px;margin-top:3px;line-height:1.25}
+.sps-customer-v1 .sps-service-status,.sps-customer-v1 .sps-service-status.wide{grid-column:3;grid-row:auto;min-width:0;padding:0;border-left:0;text-align:right}
+.sps-customer-v1 .sps-service-status small{font-size:9px;color:#829fb4}
+.sps-customer-v1 .sps-service-status b{font-size:10.5px;line-height:1.35;margin-top:2px;overflow-wrap:anywhere}
+.sps-customer-v1 .sps-service-status b[data-tone=good]{color:#72ecad}
+.sps-customer-v1 .sps-inline-link{font-size:10px;color:#79d6ff}
+.sps-customer-v1 .sps-services-note{margin-top:7px;padding:7px 10px;font-size:10px;background:#101a27;color:#8da6b9}
+.sps-customer-v1 .sps-health{padding:12px 14px 14px}
+.sps-customer-v1 .sps-health .sps-section-heading.compact{padding:0 2px 8px}
+.sps-customer-v1 .sps-health .scanner-container{display:none!important}
+.sps-customer-v1 .sps-health #mainDashboard{display:none!important}
+.sps-customer-v1 .sps-health #statusMessage{
+  display:block!important;margin:0!important;min-height:48px;padding:11px 14px!important;
+  background:#15382e;border:1px solid #2f865b;border-radius:10px;color:#bdffdc;font-size:12px;line-height:1.5;
+}
+.sps-customer-v1 .sps-health #statusMessage.pending{background:#40321b;border-color:#94733c;color:#ffe3a9}
+.sps-customer-v1 .sps-health #statusMessage.error{background:#3f2026;border-color:#974253;color:#ffd3d8}
+.sps-customer-v1 .sps-health #statusMessage.neutral{background:#152b3c;border-color:#326e91;color:#c1e9fa}
+.sps-customer-v1 .sps-customer-alerts{margin-top:8px;display:none;gap:6px;flex-wrap:wrap}
+.sps-customer-v1 .sps-customer-alerts:not(:empty){display:flex}
+.sps-customer-v1 .sps-customer-alerts span{border:1px solid #8a653b;background:#3a2c1b;color:#ffe0aa;border-radius:7px;padding:5px 8px;font-size:10px}
+.sps-customer-v1 .sps-activity{overflow:hidden}
+.sps-customer-v1 .sps-activity>summary{padding:10px 14px;font-size:12px;color:#d8effd}
+.sps-customer-v1 .sps-activity>summary small{font-size:10px;color:#9bb8cb}
+.sps-customer-v1 .sps-activity #logsGrid{background:#111b29}
+.sps-customer-v1 .sps-activity[open] #logsGrid{padding:7px 12px 12px}
+.sps-customer-v1 .sps-admin-overlay{position:fixed;inset:0;z-index:15500;background:#020a13d5;padding:14px;align-items:center;justify-content:center;display:none}
+.sps-customer-v1 .sps-admin-overlay.is-open{display:flex}
+.sps-customer-v1 .sps-admin-dialog{
+  width:min(540px,100%);max-height:min(760px,94dvh);overflow-y:auto;
+  border:1px solid #447991;border-radius:16px;background:linear-gradient(145deg,#1a3044,#111e30);color:#f0f8ff;
+  box-shadow:0 30px 75px #0009;
+}
+.sps-customer-v1 .sps-admin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:16px 18px;border-bottom:1px solid #31556a}
+.sps-customer-v1 .sps-admin-head h2{font-size:18px;margin:2px 0 0}
+.sps-customer-v1 .sps-admin-head p{margin:5px 0 0;color:#a6c8dc;font-size:11px}
+.sps-customer-v1 .sps-modal-close{border:1px solid #4b7790;border-radius:8px;background:#19394e;color:#e6f6ff;width:34px;height:34px;cursor:pointer;flex:0 0 34px}
+.sps-customer-v1 .sps-admin-content{padding:15px 17px 19px}
+.sps-customer-v1 .sps-admin-content #sps-customer-admin-access{margin:0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+.sps-customer-v1 .sps-admin-content #sps-customer-admin-access h3{display:none}
+.sps-customer-v1 .sps-admin-content #sps-customer-admin-access p{line-height:1.55;font-size:12px}
+.sps-customer-v1 .sps-admin-content #sps-customer-admin-access label{line-height:1.45;font-size:12px}
+.sps-customer-v1 .sps-admin-content #sps-customer-admin-access button{max-width:100%;margin:8px 8px 0 0}
+.sps-customer-v1 .sps-admin-explainer{border-radius:10px;padding:11px 12px;margin:0 0 12px;background:#153044;border:1px solid #356985;color:#cce9f8;font-size:11px}
+.sps-customer-v1.sps-modal-open{overflow:hidden}
+@media (max-width:990px){
+ .sps-customer-v1 .sps-header{align-items:flex-start;flex-wrap:wrap}
+ .sps-customer-v1 .sps-header-actions{width:100%;max-width:none;justify-content:flex-start}
+ .sps-customer-v1 .sps-section-heading p{display:none}
+ .sps-customer-v1 .sps-service-row{grid-template-columns:30px minmax(0,1fr) minmax(108px,.8fr);gap:1px 7px;padding:10px}
+ .sps-customer-v1 .sps-service-copy span{display:none}
+}
+@media (max-width:700px){
+ .sps-customer-v1 .sps-shell{padding:10px 10px 22px}
+ .sps-customer-v1 .sps-header{padding:12px}
+ .sps-customer-v1 .sps-header h1{font-size:21px}
+ .sps-customer-v1 .sps-header-actions{gap:6px}
+ .sps-customer-v1 .sps-action{flex:1 1 auto;font-size:11px;min-height:35px;padding:7px}
+ .sps-customer-v1 .sps-state-strip{grid-template-columns:1fr 1fr;gap:7px}
+ .sps-customer-v1 .sps-state-strip>.sps-installation-mini{grid-column:1/-1}
+ .sps-customer-v1 .sps-state-strip>.sps-sync-mini{grid-column:2}
+ .sps-customer-v1 .sps-service-list{grid-template-columns:1fr}
+ .sps-customer-v1 .sps-service-row{min-height:65px;grid-template-columns:32px minmax(0,1fr) minmax(138px,.7fr)}
+ .sps-customer-v1 .sps-service-copy span{display:block}
+ .sps-customer-v1 .sps-section-heading h2{font-size:15px}
+}
+@media (max-width:410px){
+ .sps-customer-v1 .sps-header-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sps-customer-v1 .sps-service-row{grid-template-columns:30px minmax(0,1fr) minmax(105px,.75fr)}
+ .sps-customer-v1 .sps-service-copy span{display:none}
+ .sps-customer-v1 .sps-admin-head{padding:13px}
+ .sps-customer-v1 .sps-admin-content{padding:12px}
+}
