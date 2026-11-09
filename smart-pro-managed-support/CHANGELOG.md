@@ -1,11 +1,20 @@
-## 3.19.12 — Guided Customer Activation UI (Draft, 8 Nov 2026)
+## 3.19.13 — Customer onboarding visual polish (9 Nov 2026)
+
+- Visual-only readiness distinction: local policy can make the code stage visible without claiming Admin enrollment/preapproval is complete; Preparation remains neutral until identity pairing.
+- Pairing button becomes visually inactive until a correctly formatted one-time code is entered. Existing server-side Broker validation, expiry and one-time use remain authoritative. No pairing endpoints, secrets or client-side acceptance changes.
+- Add concise customer guidance for first readiness and collapsed technical diagnostics. Final active-status UI remains unchanged.
+- Preserve the verified 3.19.12 identity, First Seed, Broker leases, unattended supervisor and stable POST gate. The general exact-group version tuple includes 3.19.13 to retain the same protected target source semantics.
+- Requires Broker 0.60.59 to be installed first. GitHub workflow, Dockerfile, config, launcher and application version must all agree before multiarch publishing.
+- Static QA candidate; production and clean new-onboarding QA still required. Never replay a consumed First Seed.
+
+## 3.19.12 — Guided Customer Activation UI (Live verified, 8 Nov 2026)
 
 - Replaces the customer landing screen with one compact, tablet-friendly guided activation card driven by existing local policy, paired identity, First Seed state and live persistent runtime.
 - Uses established one-time pairing, First Seed and runtime-start POST handlers. Does not introduce new server writers or automatic MeshCentral provisioning.
 - Displays only the applicable next customer action, with explicit advice to obtain the one-time 15-minute code from Customer Portal after Smart Pro System preparation/approval. No unverified direct deep link is invented.
 - Keeps the operational and historical technical views collapsed under one advanced disclosure.
 - Preserves general 3.19.11 exact per-installation target group/First Seed and verified runtime reuse gates when bumping to 3.19.12.
-- Draft branch only: automated syntax + stable POST regression passed. Not merged, published or installed; customer tablet visual QA and a clean first-installation end-to-end test remain required.
+- Live verified: installation ID-10509 completed all seven Admin Portal activation stages, first target identity, persistent runtime, native Verified Binding, and automatic restart/reuse checks.
 
 ## 3.19.11 — General First MeshAgent Enrollment (Candidate, 5 Nov 2026)
 

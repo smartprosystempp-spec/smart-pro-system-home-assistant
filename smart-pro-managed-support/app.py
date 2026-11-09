@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.12")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.13")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -143,7 +143,7 @@ ASSISTED_FIRST_SEED_VERSION = "3.19.7"
 ASSISTED_FIRST_SEED_ENABLED = True
 # General, exact target-group first identity enrollment for every valid ID-xxxxx.
 # Version-pinned to avoid changing the already verified 3.19.10 reuse runtime.
-GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12")
+GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12", "3.19.13")
 # Legacy pilots retain their prior 3.19.6 code paths even in a local test import.
 
 FIRST_SEED_PILOT_ARCH = "amd64"
@@ -6065,9 +6065,11 @@ def render_page(local_snapshot, notice="", notice_kind="info"):
 <form method="post" action="pair" autocomplete="off">
 <input type="hidden" name="csrf" value="{esc(CSRF_TOKEN)}">
 <label for="pairing_code">Προσωρινός κωδικός ενεργοποίησης</label>
-<input id="pairing_code" name="pairing_code" type="text" inputmode="text" maxlength="100"
-  placeholder="SPM-XXXX-XXXX-XXXX-XXXX" required autocomplete="off"{disabled}>
-<button class="guide-button" type="submit"{disabled}>Συνέχεια με τον κωδικό</button>
+<input id="pairing_code" name="pairing_code" type="text" inputmode="text" maxlength="23"
+  placeholder="SPM-XXXX-XXXX-XXXX-XXXX" required autocomplete="off" autocapitalize="characters"
+  spellcheck="false" aria-describedby="pairing_code_help"{disabled}>
+<p id="pairing_code_help" class="guide-field-help">Ο προσωρινός κωδικός έχει τη μορφή SPM-XXXX-XXXX-XXXX-XXXX και ισχύει για 15 λεπτά.</p>
+<button id="managed_pair_continue" class="guide-button" type="submit"{disabled}>Συνέχεια με τον κωδικό</button>
 </form>
 </div>'''
 
@@ -7133,8 +7135,9 @@ value="{esc(scope_id)}" required{seed_disabled}>
             '<div class="guide-panel"><div class="guide-eyebrow">Βήμα 2 · Ενέργεια πελάτη</div>'
             '<p>Συνδεθείτε στο Customer Portal και εκδώστε έναν προσωρινό κωδικό ενεργοποίησης '
             'μόνο αφού η ομάδα μας επιβεβαιώσει ότι η εγκατάσταση είναι έτοιμη.</p>'
-            '<p class="guide-hint">Ο κωδικός ισχύει για 15 λεπτά και χρησιμοποιείται μία φορά. '
-            'Επιστρέψτε σε αυτή την οθόνη για να τον καταχωρίσετε.</p>'
+            '<p class="guide-hint">Η ενεργή τοπική πολιτική δεν επιβεβαιώνει από μόνη της την προέγκριση στο Admin Portal. '
+            'Συνεχίστε μόνο όταν η ομάδα Smart Pro System σάς ενημερώσει ότι η προετοιμασία ολοκληρώθηκε. '
+            'Ο κωδικός χρησιμοποιείται μία φορά.</p>'
             + pair_html + '</div>'
         ) if local_allowed else (
             '<div class="guide-wait">Δεν χρειάζεται κάποια ενέργεια αυτή τη στιγμή. '
@@ -7173,9 +7176,16 @@ value="{esc(scope_id)}" required{seed_disabled}>
                 '</form>'
             )
     phase_title = ['Προετοιμασία', 'Προσωρινός κωδικός', 'Πρώτη σύνδεση', 'Ολοκλήρωση']
+    # Local policy means the customer may see the code stage, not that an Admin
+    # has already completed the independent enrollment/preapproval controls.
+    # Avoid a green completed check on Preparation before Managed pairing.
+    def customer_step_state(j):
+        if identity is None and guide_phase == 2 and j == 1:
+            return 'ready'  # local readiness only; never admin approval
+        return 'done' if (guide_phase == 5 or j < guide_phase) else 'current' if j == guide_phase else 'upcoming'
     steps_html = ''.join(
-        f'<div class="guide-step {"done" if (guide_phase == 5 or j < guide_phase) else "current" if j == guide_phase else "upcoming"}">'
-        f'<span class="guide-number">{"✓" if (guide_phase == 5 or j < guide_phase) else j}</span>'
+        f'<div class="guide-step {customer_step_state(j)}">'
+        f'<span class="guide-number">{"✓" if customer_step_state(j) == "done" else j}</span>'
         f'<span>{esc(label)}</span></div>'
         for j, label in enumerate(phase_title, start=1)
     )
@@ -7220,6 +7230,7 @@ main{{max-width:980px;padding:18px}}
 .guide-step{{display:flex;align-items:center;gap:9px;font-weight:650;font-size:12px;color:#8c9eae;min-width:0}}
 .guide-number{{display:grid;place-items:center;flex:0 0 30px;height:30px;border:1px solid #617389;border-radius:50%;background:#253448;font-size:14px}}
 .guide-step.done{{color:#a2eed0}}.guide-step.done .guide-number{{background:#195f45;border-color:#4ccf98;color:#b5ffe0}}
+.guide-step.ready{{color:#b9cfdf}}.guide-step.ready .guide-number{{background:#263e50;border-color:#62829a;color:#cde1ed}}
 .guide-step.current{{color:#edfbff}}.guide-step.current .guide-number{{background:#1ac6ea;border-color:#6de9ff;color:#092334}}
 .guide-content{{padding:19px 23px 22px}}.guide-content h3{{font-size:20px;margin:3px 0 12px;letter-spacing:-.3px}}
 .guide-content p{{margin:9px 0 14px;color:#c3d5e5}}
@@ -7228,7 +7239,7 @@ main{{max-width:980px;padding:18px}}
 .guide-wait,.guide-success{{border-radius:11px;border:1px solid #38607a;background:#132e43;padding:14px;color:#d3edfb}}
 .guide-success{{background:#153d30;border-color:#367e5a;color:#b7f8d3}}
 .guide-pair{{margin-top:12px;max-width:530px}}.guide-pair form{{margin:0}}
-.guide-pair label{{font-size:13px;color:#e1f5ff}}.guide-pair input{{max-width:530px}}
+.guide-pair label{{font-size:13px;color:#e1f5ff}}.guide-pair input{{max-width:530px}}.guide-field-help{{color:#a9c0d0;font-size:12px;margin:5px 0 10px!important}}
 .guide-button{{background:linear-gradient(110deg,#36d9f5,#13abe1);border-radius:10px;padding:12px 18px;font-size:14px;color:#061a25;box-shadow:0 4px 20px #0de3ff1f}}
 .guide-button:disabled{{background:#426578;color:#d0dee8;box-shadow:none}}
 .guide-confirm{{display:flex;gap:10px;align-items:flex-start;line-height:1.5;font-weight:500;color:#dae9f6;margin:14px 0}}
@@ -7248,9 +7259,23 @@ main{{max-width:980px;padding:18px}}
 {notice_html}
 {guide_html}
 <details class="customer-advanced"><summary>Τεχνικές λεπτομέρειες και διαγνωστικά</summary>
-<div class="customer-advanced-body">{technical_html}{local_evidence_html}{reuse_proof_html}</div></details>
+<div class="customer-advanced-body"><p class="guide-field-help">Προχωρημένα διαγνωστικά για έλεγχο με την ομάδα Smart Pro System. Δεν απαιτούνται για την καθημερινή χρήση.</p>{technical_html}{local_evidence_html}{reuse_proof_html}</div></details>
 <div class="footer">Smart Pro Managed Support v{esc(VERSION)} · Τα ιστορικά διαγνωστικά εργαλεία διατηρούνται ως τεχνικό αρχείο και παραμένουν κλειδωμένα. Οι ενέργειες Web / Terminal / Files / Desktop για τεχνικό παραμένουν NOT AUTHORIZED.</div>
-</main></body></html>'''
+</main>
+<script>
+/* Visual readiness only. The authenticated Broker remains the sole pairing authority. */
+(function() {{
+  const code = document.getElementById('pairing_code');
+  const next = document.getElementById('managed_pair_continue');
+  if (!code || !next || code.disabled) return;
+  const validCode = /^SPM-[A-HJ-NP-Z2-9]{{4}}(?:-[A-HJ-NP-Z2-9]{{4}}){{3}}$/i;
+  const refresh = () => {{ next.disabled = !validCode.test(code.value.trim()); }};
+  code.addEventListener('input', refresh);
+  code.addEventListener('change', refresh);
+  refresh();
+}})();
+</script>
+</body></html>'''
 
 
 ROUTER_COMPAT_LOCK = threading.Lock()
