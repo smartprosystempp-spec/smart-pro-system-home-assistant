@@ -23,7 +23,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.13")
+VERSION = os.environ.get("SMART_PRO_MANAGED_VERSION", "3.19.14")
 ARCH = os.environ.get("SMART_PRO_MANAGED_ARCH", "unknown")
 PORT = 8098
 BROKER_BASE = os.environ.get(
@@ -143,7 +143,7 @@ ASSISTED_FIRST_SEED_VERSION = "3.19.7"
 ASSISTED_FIRST_SEED_ENABLED = True
 # General, exact target-group first identity enrollment for every valid ID-xxxxx.
 # Version-pinned to avoid changing the already verified 3.19.10 reuse runtime.
-GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12", "3.19.13")
+GENERAL_FIRST_SEED_VERSION = ("3.19.11", "3.19.12", "3.19.13", "3.19.14")
 # Legacy pilots retain their prior 3.19.6 code paths even in a local test import.
 
 FIRST_SEED_PILOT_ARCH = "amd64"
@@ -153,6 +153,9 @@ MIN_AGENT_BYTES = 100000
 MAX_AGENT_BYTES = 67108864
 ELF_MACHINE = {"aarch64": 183, "amd64": 62}
 CSRF_TOKEN = secrets.token_urlsafe(24)
+UI_SCRIPT = "/* UI-only customer experience. No enrollment or privileged runtime changes. */\n(function () {\n  const code = document.getElementById('pairing_code');\n  const next = document.getElementById('managed_pair_continue');\n  if (code && next && !code.disabled) {\n    const validCode = /^SPM-[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){3}$/i;\n    const refresh = () => { next.disabled = !validCode.test(code.value.trim()); };\n    code.addEventListener('input', refresh);\n    code.addEventListener('change', refresh);\n    refresh();\n  }\n\n  const version = document.getElementById('managed_version_trigger');\n  const archive = document.getElementById('managed_technical_archive');\n  const closeArchive = document.getElementById('managed_archive_close');\n  let clicks = 0;\n  let lastClickAt = 0;\n  if (version && archive) {\n    version.addEventListener('click', function () {\n      const now = Date.now();\n      if (now - lastClickAt > 4500) clicks = 0;\n      lastClickAt = now;\n      clicks += 1;\n      if (clicks !== 7) return;\n      clicks = 0;\n      archive.hidden = false;\n      version.setAttribute('aria-expanded', 'true');\n      archive.scrollIntoView({ behavior: 'smooth', block: 'start' });\n    });\n  }\n  if (closeArchive && archive) {\n    closeArchive.addEventListener('click', function () {\n      archive.hidden = true;\n      if (version) version.setAttribute('aria-expanded', 'false');\n      clicks = 0;\n      if (version) version.focus();\n      window.scrollTo({ top: 0, behavior: 'smooth' });\n    });\n  }\n\n  const back = document.getElementById('managed_back_addons');\n  if (back) {\n    back.addEventListener('click', function (event) {\n      // Native Home Assistant ingress iframe navigation, not browser history.\n      if (window.parent !== window) {\n        event.preventDefault();\n        window.parent.postMessage({ type: 'home-assistant/navigate', path: '/hassio/dashboard' }, '*');\n      }\n      // The normal anchor provides a navigable fallback outside an ingress iframe.\n    });\n  }\n})();"
+UI_SCRIPT_SHA256 = base64.b64encode(hashlib.sha256(UI_SCRIPT.encode("utf-8")).digest()).decode("ascii")
+
 STATE_LOCK = threading.RLock()
 RUNTIME_WORKER_LOCK = threading.Lock()
 RUNTIME_WORKER_ACTIVE = False
@@ -7254,27 +7257,33 @@ main{{max-width:980px;padding:18px}}
 @media(max-width:700px){{main{{padding:10px}}.hero{{padding:14px}}.hero h1{{font-size:20px}}.guide-top{{padding:16px;display:block}}.guide-status{{display:inline-block;margin-top:10px}}.guide-top h2{{font-size:21px}}.guide-steps{{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:15px}}.guide-content{{padding:16px}}.guide-content h3{{font-size:19px}}.guide-foot{{padding:11px 16px}}}}
 @media(max-width:420px){{.guide-step{{font-size:11px}}.guide-number{{flex-basis:26px;height:26px}}.hero .sub{{font-size:12px}}}}
 
+/* Customer-only header navigation and unobtrusive local technician archive reveal. */
+.hero-head{{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}}
+.hero-head h1{{margin-bottom:3px}}
+.version-trigger{{display:inline;padding:0;margin:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;box-shadow:none;cursor:default;vertical-align:baseline}}
+.version-trigger:focus-visible{{outline:2px solid #61dafa;outline-offset:3px;border-radius:2px}}
+.addons-return{{flex:0 0 auto;align-self:flex-start;padding:7px 11px;border-radius:9px;border:1px solid #3e7892;color:#c7f2ff;text-decoration:none;font-size:12px;font-weight:700;white-space:nowrap;background:#173c4e}}
+.addons-return:hover,.addons-return:focus-visible{{border-color:#6bdffa;background:#1b4f65;color:#fff}}
+.technical-archive{{margin:14px 0 16px;border:1px solid #32475b;border-radius:12px;background:#121c2a;padding:14px}}
+.technical-archive[hidden]{{display:none!important}}
+.technical-archive-head{{display:flex;align-items:center;justify-content:space-between;gap:10px}}
+.technical-archive-head h2{{margin:0}}
+.technical-archive-close{{margin:0;border:1px solid #48718a;background:#183d53;color:#c8f0ff;padding:7px 11px}}
+.technical-archive .customer-advanced-body{{padding:2px 0 0}}
+.technical-archive .guide-seed{{display:none}}
+@media(max-width:560px){{.hero-head{{flex-wrap:wrap}}.addons-return{{margin-top:2px}}.technical-archive-head{{align-items:flex-start;flex-wrap:wrap}}}}
+
 </style></head><body><main>
-<section class="hero"><h1>Smart Pro Managed Support</h1><div class="sub">v{esc(VERSION)} · Ασφαλής Managed υποστήριξη · {esc(ARCH)}</div><span class="badge {badge_class}">{esc(badge)}</span><div class="note">{esc(reason)}</div></section>
+<section class="hero"><div class="hero-head"><div><h1>Smart Pro Managed Support</h1><div class="sub"><button type="button" class="version-trigger" id="managed_version_trigger" aria-label="Έκδοση Smart Pro Managed Support" aria-controls="managed_technical_archive" aria-expanded="false">v{esc(VERSION)}</button> · Ασφαλής Managed υποστήριξη · {esc(ARCH)}</div></div><a class="addons-return" id="managed_back_addons" href="/hassio/dashboard" target="_top" rel="noopener" aria-label="Επιστροφή στα πρόσθετα Home Assistant">← Στα πρόσθετα</a></div><span class="badge {badge_class}">{esc(badge)}</span><div class="note">{esc(reason)}</div></section>
 {notice_html}
 {guide_html}
-<details class="customer-advanced"><summary>Τεχνικές λεπτομέρειες και διαγνωστικά</summary>
-<div class="customer-advanced-body"><p class="guide-field-help">Προχωρημένα διαγνωστικά για έλεγχο με την ομάδα Smart Pro System. Δεν απαιτούνται για την καθημερινή χρήση.</p>{technical_html}{local_evidence_html}{reuse_proof_html}</div></details>
-<div class="footer">Smart Pro Managed Support v{esc(VERSION)} · Τα ιστορικά διαγνωστικά εργαλεία διατηρούνται ως τεχνικό αρχείο και παραμένουν κλειδωμένα. Οι ενέργειες Web / Terminal / Files / Desktop για τεχνικό παραμένουν NOT AUTHORIZED.</div>
+<section id="managed_technical_archive" class="technical-archive" hidden>
+<div class="technical-archive-head"><h2>Τεχνικές λεπτομέρειες και διαγνωστικά</h2><button type="button" id="managed_archive_close" class="technical-archive-close">Κλείσιμο ×</button></div>
+<p class="guide-field-help">Ιστορικά εργαλεία συντήρησης. Οι παλιές ενέργειες παραμένουν κλειδωμένες και δεν επιτρέπεται πρόσβαση τεχνικού μόνο μέσω αυτής της προβολής.</p>
+<div class="customer-advanced-body">{technical_html}{local_evidence_html}{reuse_proof_html}</div></section>
+<div class="footer">Smart Pro System · Ασφαλής Managed υποστήριξη.</div>
 </main>
-<script>
-/* Visual readiness only. The authenticated Broker remains the sole pairing authority. */
-(function() {{
-  const code = document.getElementById('pairing_code');
-  const next = document.getElementById('managed_pair_continue');
-  if (!code || !next || code.disabled) return;
-  const validCode = /^SPM-[A-HJ-NP-Z2-9]{{4}}(?:-[A-HJ-NP-Z2-9]{{4}}){{3}}$/i;
-  const refresh = () => {{ next.disabled = !validCode.test(code.value.trim()); }};
-  code.addEventListener('input', refresh);
-  code.addEventListener('change', refresh);
-  refresh();
-}})();
-</script>
+<script>{UI_SCRIPT}</script>
 </body></html>'''
 
 
@@ -7462,7 +7471,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" + UI_SCRIPT_SHA256 + "'; form-action 'self'; frame-ancestors 'self'")
         self.end_headers()
         self.wfile.write(data)
 

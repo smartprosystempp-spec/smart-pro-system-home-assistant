@@ -1,3 +1,12 @@
+## 3.19.14 — Discreet technician archive & Home Assistant return navigation (9 Nov 2026)
+
+- Removes the visible Technical Details disclosure from the normal customer screen; the historical archive opens only after seven consecutive clicks on the version text and can be closed again. No hidden button is shown.
+- This is **visual concealment only**, not authentication: the underlying HTML is still present in the delivered page. True technician RBAC/time-limited access is deferred to a separate future project.
+- Adds a compact “Στα πρόσθετα” navigation link; in Home Assistant ingress the navigation message targets `/hassio/dashboard`, with a standard top-level anchor as fallback.
+- Allows only the known inline customer script via its exact SHA-256 CSP hash. No unsafe-inline script permission and no broader script sources.
+- Preserves all prior Managed identity, First Seed, Broker runtime/lease, local policy, version-pinned exact-group and stable POST guards. Requires Broker 0.60.60 before upgrading.
+- No installer/Portal/technician-rights/runtime state writes. Live ingress navigation check pending.
+
 ## 3.19.13 — Customer onboarding visual polish (9 Nov 2026)
 
 - Visual-only readiness distinction: local policy can make the code stage visible without claiming Admin enrollment/preapproval is complete; Preparation remains neutral until identity pairing.
