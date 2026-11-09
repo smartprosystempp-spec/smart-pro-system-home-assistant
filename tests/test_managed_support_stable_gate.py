@@ -106,6 +106,24 @@ app._serve_until_shutdown(server)
         self.assertIn('const validCode =', html)
         self.assertIn('next.disabled = !validCode.test', html)
 
+    def test_hidden_archive_and_back_navigation_contract(self):
+        with mock.patch.object(app, "load_identity", return_value=None), \
+             mock.patch.object(app, "get_server_state", return_value={}):
+            page = app.render_page({"allowed_local": False, "policy": {"installation_id": "ID-10509"}})
+        self.assertIn('id="managed_technical_archive" class="technical-archive" hidden', page)
+        self.assertNotIn('<details class="customer-advanced"><summary>', page)
+        self.assertIn('id="managed_version_trigger"', page)
+        self.assertIn('id="managed_back_addons"', page)
+        self.assertIn('href="/hassio/dashboard"', page)
+        self.assertIn('>← Στα πρόσθετα</a>', page)
+        self.assertIn('id="managed_archive_close"', page)
+        self.assertIn('if (clicks !== 7) return', page)
+        self.assertIn('home-assistant/navigate', page)
+        self.assertIn('archive.hidden = false', page)
+        self.assertIn('archive.hidden = true', page)
+        self.assertEqual(app.UI_SCRIPT_SHA256, __import__('base64').b64encode(__import__('hashlib').sha256(app.UI_SCRIPT.encode('utf-8')).digest()).decode('ascii'))
+        self.assertTrue(app.STABLE_POST_ACTIONS_ONLY)
+
     def test_pairing_ui_respects_assisted_pairing_and_local_gate(self):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertIn('disabled = "" if local_allowed and ASSISTED_INITIAL_PAIRING_ENABLED else " disabled"', source)
