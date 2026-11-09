@@ -1,4 +1,4 @@
-/* Smart Pro System 3.0.31 — Customer Dashboard tablet-first presentation.
+/* Smart Pro System 3.0.32 — Customer Dashboard tablet-first presentation.
    Additive layer. Legacy technician/admin APIs and underlying status IDs unchanged. */
 body.sps-vnext.sps-customer-v1 {
   color-scheme:dark;
@@ -133,4 +133,76 @@ body.sps-vnext.sps-customer-v1 {
  .sps-customer-v1 .sps-service-copy span{display:none}
  .sps-customer-v1 .sps-admin-head{padding:13px}
  .sps-customer-v1 .sps-admin-content{padding:12px}
+}
+
+
+/* 3.0.32: tablet compact summary / source-preserving detail modals */
+.sps-customer-v1.sps-customer-compact .sps-shell{max-width:1170px;padding-top:10px}
+.sps-customer-v1.sps-customer-compact .sps-header{padding:10px 13px;gap:9px;margin-bottom:7px}
+.sps-customer-v1.sps-customer-compact .sps-brand-mark{width:36px;height:36px;border-radius:10px}
+.sps-customer-v1.sps-customer-compact .sps-header h1{font-size:20px}
+.sps-customer-v1.sps-customer-compact .sps-header p{display:none}
+.sps-customer-v1.sps-customer-compact .sps-eyebrow{font-size:8px}
+.sps-customer-v1.sps-customer-compact .sps-action{min-height:31px;padding:5px 9px;font-size:10.5px}
+.sps-customer-v1.sps-customer-compact .sps-header-actions{gap:5px}
+.sps-customer-v1.sps-customer-compact .sps-state-strip{grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,.8fr);gap:7px}
+.sps-customer-v1.sps-customer-compact .sps-state-strip>div{min-height:49px;padding:6px 11px;overflow:hidden}
+.sps-customer-v1.sps-customer-compact .sps-state-strip span,.sps-customer-v1.sps-customer-compact .sps-state-strip small{font-size:9px;line-height:1.22}
+.sps-customer-v1.sps-customer-compact .sps-state-strip strong,.sps-customer-v1.sps-customer-compact .sps-state-strip #uiCompactPlan{font-size:11.5px;line-height:1.26;overflow-wrap:anywhere;margin-top:2px}
+.sps-customer-v1.sps-customer-compact .sps-state-strip .sps-plan small{margin-top:1px}
+.sps-customer-v1.sps-customer-compact .sps-connection-details{margin-top:6px}
+.sps-customer-v1.sps-customer-compact .sps-connection-details>summary{padding:5px 11px;font-size:10px}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini{margin-top:6px;display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:3px 8px 3px 5px;min-height:23px;border-radius:100px;border:1px solid #356f63;background:#163b32;color:#adf1cf;font:700 10.5px/1.25 system-ui,-apple-system,sans-serif;cursor:pointer;text-align:left}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=attention]{background:#3b301e;color:#ffe6a8;border-color:#95703c}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=bad]{background:#47232b;color:#ffd2d8;border-color:#a64b60}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=muted]{background:#172d3c;color:#d1e3f2;border-color:#3e6178}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini .sps-monitor-dot{display:grid;place-items:center;background:#25765b;color:#e6fff4;width:17px;height:17px;flex:none;border-radius:50%;font-weight:850}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=attention] .sps-monitor-dot{background:#916326}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=bad] .sps-monitor-dot{background:#a43d54}
+.sps-customer-v1.sps-customer-compact .sps-monitor-mini[data-tone=muted] .sps-monitor-dot{background:#3f657f}
+.sps-customer-v1.sps-customer-compact .sps-monitor-chevron{opacity:.7;font-size:14px;margin-left:4px}
+.sps-customer-v1.sps-customer-compact .sps-compact-card{margin:7px 0 0;width:100%;display:flex;align-items:center;gap:11px;text-align:left;cursor:pointer;color:#e6f6ff;background:linear-gradient(115deg,#142a3a,#102132);border:1px solid #37617a;border-radius:11px;min-height:52px;padding:9px 12px;font:inherit}
+.sps-customer-v1.sps-customer-compact .sps-compact-icon{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;color:#82d5f5;border:1px solid #39647d;background:#1a3a50;border-radius:8px;font-size:18px}
+.sps-customer-v1.sps-customer-compact .sps-compact-copy{display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}
+.sps-customer-v1.sps-customer-compact .sps-compact-copy strong{font-size:13px;line-height:1.2}
+.sps-customer-v1.sps-customer-compact .sps-compact-copy small{color:#a8c1d4;font-size:10px;line-height:1.2}
+.sps-customer-v1.sps-customer-compact .sps-compact-status{padding:5px 9px;border:1px solid #405d75;background:#203347;border-radius:100px;color:#d7e9f5;font-size:10px;font-weight:750;white-space:nowrap}
+.sps-customer-v1.sps-customer-compact .sps-compact-status[data-tone=good]{color:#adf9d3;border-color:#307b5c;background:#174435}
+.sps-customer-v1.sps-customer-compact .sps-compact-status[data-tone=attention]{color:#ffe1a4;border-color:#95703c;background:#3b2e1b}
+.sps-customer-v1.sps-customer-compact .sps-compact-status[data-tone=bad]{color:#ffcad0;border-color:#a54b62;background:#42232d}
+.sps-customer-v1.sps-customer-compact .sps-compact-more{white-space:nowrap;color:#8bd8f1;font-size:11px}
+.sps-customer-v1.sps-customer-compact .sps-activity-shortcut{display:block;width:100%;padding:7px 11px;margin-top:7px;border-radius:9px;background:#0f1d2c;border:1px solid #28455c;color:#a8cbdf;text-align:left;cursor:pointer;font-size:10.5px;font-weight:700}
+.sps-customer-v1.sps-customer-compact .sps-detail-overlay{position:fixed;inset:0;z-index:15400;background:#030a13df;padding:14px;align-items:center;justify-content:center;display:none}
+.sps-customer-v1.sps-customer-compact .sps-detail-overlay.is-open{display:flex}
+.sps-customer-v1.sps-customer-compact .sps-detail-dialog{width:min(770px,100%);max-height:min(760px,91dvh);display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(140deg,#172b3d,#101a29);border:1px solid #3b6d86;border-radius:15px;box-shadow:0 28px 70px #0009}
+.sps-customer-v1.sps-customer-compact .sps-detail-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 17px;border-bottom:1px solid #2c4e66}
+.sps-customer-v1.sps-customer-compact .sps-detail-head h2{margin:2px 0 0;font-size:18px}
+.sps-customer-v1.sps-customer-compact .sps-detail-close{width:33px;height:33px;border:1px solid #487b92;border-radius:8px;color:#eff9ff;background:#173a50;cursor:pointer;flex:none}
+.sps-customer-v1.sps-customer-compact .sps-detail-content{overflow-y:auto;min-height:0;padding:13px 16px 18px;overscroll-behavior:contain}
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-services,.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-health,.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-activity{margin-top:0}
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-activity{margin-top:10px}
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-section-heading p{display:none}
+.sps-customer-v1.sps-customer-compact button:focus-visible{outline:2px solid #66ddfa;outline-offset:3px}
+@media (min-width:701px) and (max-width:990px){
+ .sps-customer-v1.sps-customer-compact .sps-header{flex-wrap:nowrap;align-items:center}
+ .sps-customer-v1.sps-customer-compact .sps-brand{flex:1;min-width:0}
+ .sps-customer-v1.sps-customer-compact .sps-header-actions{flex:0 1 auto;max-width:none;width:auto;justify-content:flex-end}
+}
+@media (max-width:700px){
+ .sps-customer-v1.sps-customer-compact .sps-state-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sps-customer-v1.sps-customer-compact .sps-state-strip>.sps-installation-mini{grid-column:1/-1}
+ .sps-customer-v1.sps-customer-compact .sps-state-strip>.sps-sync-mini{grid-column:2}
+ .sps-customer-v1.sps-customer-compact .sps-compact-card{flex-wrap:wrap;gap:8px}
+ .sps-customer-v1.sps-customer-compact .sps-compact-copy{flex:1 1 55%}
+ .sps-customer-v1.sps-customer-compact .sps-compact-more{display:none}
+ .sps-customer-v1.sps-customer-compact .sps-detail-overlay{padding:7px}
+ .sps-customer-v1.sps-customer-compact .sps-detail-content{padding:9px}
+}
+/* Modals keep explanatory detail readable at 7–10 inch tablet widths. */
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-services>.sps-section-heading{display:none}
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-service-status b{font-size:11px}
+.sps-customer-v1.sps-customer-compact .sps-detail-content .sps-activity>summary{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+@media (min-width:701px) and (max-width:850px){
+ .sps-customer-v1.sps-customer-compact .sps-detail-content .sps-service-list{grid-template-columns:1fr}
+ .sps-customer-v1.sps-customer-compact .sps-detail-content .sps-service-row{grid-template-columns:34px minmax(0,1fr) minmax(160px,.8fr);min-height:62px}
 }
