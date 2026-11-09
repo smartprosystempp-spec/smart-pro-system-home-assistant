@@ -91,6 +91,21 @@ app._serve_until_shutdown(server)
             self.assertEqual(invoke("candidate-promotion"), [409])
 
 
+    def test_customer_pairing_stage_does_not_claim_admin_preapproval(self):
+        # Read-only rendering: local policy alone is NOT an Admin preapproval.
+        with mock.patch.object(app, "load_identity", return_value=None), \
+             mock.patch.object(app, "get_server_state", return_value={}):
+            html = app.render_page({
+                "allowed_local": True,
+                "policy": {"installation_id": "ID-10509"},
+            })
+        self.assertIn('guide-step ready', html)
+        self.assertNotIn('guide-step done', html)
+        self.assertIn('δεν επιβεβαιώνει από μόνη της την προέγκριση', html)
+        self.assertIn('id="managed_pair_continue"', html)
+        self.assertIn('const validCode =', html)
+        self.assertIn('next.disabled = !validCode.test', html)
+
     def test_pairing_ui_respects_assisted_pairing_and_local_gate(self):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertIn('disabled = "" if local_allowed and ASSISTED_INITIAL_PAIRING_ENABLED else " disabled"', source)
