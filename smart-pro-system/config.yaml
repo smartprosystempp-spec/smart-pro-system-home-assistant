@@ -1,6 +1,6 @@
 name: "Smart Pro System"
 description: "Κέντρο σύνδεσης, κατάστασης και υπηρεσιών Smart Pro System για Home Assistant."
-version: "3.0.32"
+version: "3.0.33"
 slug: "smart_pro_tools"
 init: false
 panel_icon: "mdi:home-cog"
@@ -8,7 +8,7 @@ panel_title: "Smart Pro System"
 panel_admin: true
 ingress: true
 ingress_port: 8099
-host_network: true
+host_network: false
 homeassistant_api: true
 hassio_api: true
 hassio_role: manager
