@@ -232,11 +232,10 @@
           const tones=Array.from(row.querySelectorAll('.sps-service-status b')).map(el=>({tone:el.dataset.tone||'muted',label:(el.textContent||'').trim()}));
           if(tones.some(t=>t.tone==='bad')){red++;continue;}
           if(tones.some(t=>t.tone==='attention')){amber++;continue;}
-          // Entitled Managed Support / External URL without working runtime is
-          // not called healthy, even if the runtime source reports 'muted'.
-          const entitled=tones.length>1 && tones[0].tone==='good';
+          // A service that is included but not installed yet stays quiet.
+          // Stopped, failed or stale runtime still counts as attention.
           const runtime=tones.length>1 ? tones[tones.length-1]:null;
-          if(entitled && runtime && runtime.tone!=='good') {amber++;continue;}
+          if(runtime && runtime.tone==='muted') continue;
           if(tones.some(t=>t.tone==='good'))good++;
         }
         // The customer Portal connection is a separate, existing authority.

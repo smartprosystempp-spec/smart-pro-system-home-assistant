@@ -24,11 +24,11 @@ COPY sps_http_security.py /
 # Additive UI inclusion at build time: the original index.html and business
 # logic remain byte-identical in the repository; fail the build if not included.
 RUN sed -i \
-  -e 's@</head>@<link rel="stylesheet" href="customer_ui.css?v=3032"></head>@' \
-  -e 's@</body>@<script defer src="customer_ui.js?v=3032"></script></body>@' \
+  -e 's@</head>@<link rel="stylesheet" href="customer_ui.css?v=3035"></head>@' \
+  -e 's@</body>@<script defer src="customer_ui.js?v=3035"></script></body>@' \
   /index.html \
-  && grep -q 'customer_ui.css?v=3032' /index.html \
-  && grep -q 'customer_ui.js?v=3032' /index.html \
+  && grep -q 'customer_ui.css?v=3035' /index.html \
+  && grep -q 'customer_ui.js?v=3035' /index.html \
   && chmod a+x /run.sh
 
 CMD [ "/run.sh" ]

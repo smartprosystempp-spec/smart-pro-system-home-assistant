@@ -164,13 +164,25 @@ function applySubscriptionServiceUiGates() {
     }
 }
 
+function portalDateTime(timestamp, withSeconds) {
+    const value = Number(timestamp);
+    if (!value) return '';
+    const date = new Date(value * 1000);
+    if (Number.isNaN(date.getTime())) return '';
+    const options = {
+        timeZone: 'Europe/Athens',
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+        hourCycle: 'h23'
+    };
+    if (withSeconds) options.second = '2-digit';
+    return date.toLocaleString('el-GR', options);
+}
+
 function portalRequestDisplayTime(request) {
     const timestamp = portalRequestTimestamp(request);
     if (!timestamp) return '';
-    return new Date(timestamp * 1000).toLocaleString('el-GR', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
+    return portalDateTime(timestamp, false);
 }
 
 
@@ -180,7 +192,7 @@ function portalCurrentPath() {
 
 function portalFormatTime(timestamp) {
     if (!timestamp) return 'Καμία ακόμη';
-    return new Date(timestamp * 1000).toLocaleString('el-GR');
+    return portalDateTime(timestamp, true) || 'Καμία ακόμη';
 }
 
 function portalFormatDate(timestamp) {
@@ -452,7 +464,7 @@ function renderVNextOverview(status) {
         if (entitlements.managed_remote_support === true) managedEntitlement = ['Περιλαμβάνεται · Ενεργό', 'good'];
         else if (String(access.state || '') === 'expired') managedEntitlement = ['Περιλαμβάνεται · Ανενεργό λόγω λήξης', 'attention'];
         else if (String(access.state || '') === 'suspended') managedEntitlement = ['Περιλαμβάνεται · Σε αναστολή', 'attention'];
-        else managedEntitlement = ['Περιλαμβάνεται · Αναμονή πρόσβασης', 'attention'];
+        else managedEntitlement = ['Περιλαμβάνεται · Αναμονή πρόσβασης', 'muted'];
     } else if (paidPlan) managedEntitlement = ['Δεν περιλαμβάνεται στο πακέτο', 'muted'];
     else managedEntitlement = ['Δεν περιλαμβάνεται', 'muted'];
     spsSetText('serviceManagedEntitlement', managedEntitlement[0], managedEntitlement[1]);
@@ -463,7 +475,7 @@ function renderVNextOverview(status) {
     let backupLabel = 'Δεν έχει ρυθμιστεί';
     let backupTone = 'muted';
     if (backup.storage_configured && backup.policy_state) { backupLabel = 'Ρυθμισμένο · ' + (backup.retention_days ? `${backup.retention_days} ημέρες` : 'πολιτική ενεργή'); backupTone = 'good'; }
-    else if (backup.policy_state && backup.policy_state !== 'none') { backupLabel = 'Πολιτική διαθέσιμη · αναμονή ρύθμισης'; backupTone = 'attention'; }
+    else if (backup.policy_state && backup.policy_state !== 'none') { backupLabel = 'Πολιτική διαθέσιμη · αναμονή ρύθμισης'; backupTone = 'muted'; }
     if (backup.upload_result_state && ['failed','error'].includes(String(backup.upload_result_state).toLowerCase())) { backupLabel = 'Απαιτεί έλεγχο'; backupTone = 'bad'; }
     spsSetText('serviceBackupState', backupLabel, backupTone);
 
@@ -1207,8 +1219,8 @@ async function fetchRealHomeData() {
             else if (id === 'update.home_assistant_core_update' && realOs === '--') realOs = 'HA Core ' + (entity.attributes.installed_version || '');
             if (id.includes('last_boot') && state !== 'unknown') { const diffDays = Math.floor((new Date() - new Date(state)) / (1000 * 60 * 60 * 24)); realUptime = `${diffDays} ημέρες`; }
             if (id.includes('backup_state') || id.includes('samba_backup')) {
-                if(entity.attributes.last_backup) backupDates.push(new Date(entity.attributes.last_backup).toLocaleString('el-GR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'})); 
-                else if (entity.attributes.last_backup_time) backupDates.push(new Date(entity.attributes.last_backup_time).toLocaleString('el-GR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}));
+                if(entity.attributes.last_backup) backupDates.push(new Date(entity.attributes.last_backup).toLocaleString('el-GR', {timeZone: 'Europe/Athens', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}));
+                else if (entity.attributes.last_backup_time) backupDates.push(new Date(entity.attributes.last_backup_time).toLocaleString('el-GR', {timeZone: 'Europe/Athens', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}));
             }
             if (id.startsWith('update.') && state === 'on') updatesPending++;
         });
@@ -1295,7 +1307,7 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
                 statusMsg.innerHTML = !guardianAllowed
                     ? "ℹ️ Η εγκατάσταση παραμένει συνδεδεμένη, αλλά η ενεργή παρακολούθηση Φρουρού είναι ανενεργή λόγω συνδρομής."
                     : (watchdogEnabled ? "✅ Το σύστημά σας παρακολουθείται ενεργά." : "✅ Το σύστημά σας είναι ασφαλές τοπικά.");
-                statusMsg.className = guardianAllowed ? 'status' : 'status pending';
+                statusMsg.className = guardianAllowed ? 'status' : 'status neutral';
             }
             supportBtn.innerText = "👨‍🔧 Αίτημα Υποστήριξης"; supportBtn.classList.remove('sent'); supportBtn.style.pointerEvents = 'auto';
         }
