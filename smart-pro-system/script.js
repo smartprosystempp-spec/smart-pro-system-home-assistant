@@ -472,11 +472,15 @@ function renderVNextOverview(status) {
     spsSetText('serviceTunnelRuntime', tunnelRuntime[0], tunnelRuntime[1]);
 
     const backup = status.managed_backup_summary || {};
+    const backupService = String(backup.service_state || '').toLowerCase();
+    const backupUpload = String(backup.upload_result_state || '').toLowerCase();
+    const backupDays = backup.retention_days ? `${backup.retention_days} ημέρες` : 'πολιτική ενεργή';
     let backupLabel = 'Δεν έχει ρυθμιστεί';
     let backupTone = 'muted';
-    if (backup.storage_configured && backup.policy_state) { backupLabel = 'Ρυθμισμένο · ' + (backup.retention_days ? `${backup.retention_days} ημέρες` : 'πολιτική ενεργή'); backupTone = 'good'; }
-    else if (backup.policy_state && backup.policy_state !== 'none') { backupLabel = 'Πολιτική διαθέσιμη · αναμονή ρύθμισης'; backupTone = 'muted'; }
-    if (backup.upload_result_state && ['failed','error'].includes(String(backup.upload_result_state).toLowerCase())) { backupLabel = 'Απαιτεί έλεγχο'; backupTone = 'bad'; }
+    if (['failed','error'].includes(backupUpload)) { backupLabel = 'Απαιτεί έλεγχο'; backupTone = 'bad'; }
+    else if (backupService === 'protected' || backupUpload === 'primary_verified') { backupLabel = 'Προστατευμένο · ' + backupDays; backupTone = 'good'; }
+    else if (backupService === 'activating') { backupLabel = 'Ενεργοποίηση σε εξέλιξη'; backupTone = 'muted'; }
+    else if (backup.policy_state && backup.policy_state !== 'none') { backupLabel = 'Πολιτική διαθέσιμη · αναμονή ενεργοποίησης'; backupTone = 'muted'; }
     spsSetText('serviceBackupState', backupLabel, backupTone);
 
     const externalLink = document.getElementById('serviceExternalUrlLink');
