@@ -7236,7 +7236,50 @@ def _guardian_try_email(entries, tech_config, request_code='', portal_pending=Fa
     return result
 
 
+_MESH_BANNER_CACHE = {'at': 0.0, 'active': False}
+_GUARDIAN_QUIET_LOGGED = False
+
+def mesh_banner_session_active(max_age=0):
+    """Read the banner bridge. A recent cached answer is reused by the Guardian loop."""
+    global _MESH_BANNER_CACHE
+    now = time.time()
+    if max_age and (now - _MESH_BANNER_CACHE['at']) < max_age:
+        return bool(_MESH_BANNER_CACHE['active'])
+    mesh = mesh_configuration_status()
+    active = False
+    if mesh['configured']:
+        try:
+            encoded_installation_id = urllib.parse.quote(mesh['installation_id'], safe='')
+            req_url = f"https://{mesh['server_host']}:8443/status?id={encoded_installation_id}"
+            request = urllib.request.Request(req_url, headers={
+                'Authorization': f"Bearer {mesh['mesh_access_token']}",
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache',
+            })
+            with urllib.request.urlopen(request, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                active = bool(data.get('active', False))
+        except Exception as error:
+            print(f'Secure MeshCentral Bridge Error: {error}', flush=True)
+            if max_age and _MESH_BANNER_CACHE['at']:
+                return bool(_MESH_BANNER_CACHE['active'])
+            return False
+    _MESH_BANNER_CACHE = {'at': now, 'active': active}
+    return active
+
+def technician_work_in_progress(tech_config):
+    if bool((tech_config or {}).get('remote_session')):
+        return True
+    return mesh_banner_session_active(max_age=20)
+
 def _guardian_deliver_due_alerts(tech_config, now_dt):
+    global _GUARDIAN_QUIET_LOGGED
+    if technician_work_in_progress(tech_config):
+        if not _GUARDIAN_QUIET_LOGGED:
+            print('[GUARDIAN] Alert delivery paused while a technician is connected.', flush=True)
+            _GUARDIAN_QUIET_LOGGED = True
+        return
+    _GUARDIAN_QUIET_LOGGED = False
     now_ts = int(time.time())
     alert_delay_sec = float(tech_config.get('alert_delay_min', 15.0) or 15.0) * 60.0
     due = []
@@ -7734,34 +7777,8 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         # --- ΕΔΩ ΕΙΝΑΙ Ο ΝΕΟΣ ΜΥΣΤΙΚΟΣ ΚΑΤΑΣΚΟΠΟΣ ΓΙΑ ΤΟ MESHCENTRAL ---
         elif request_path.endswith('/api/mesh_status'):
             mesh = mesh_configuration_status()
-            is_active = False
-
-            if mesh['configured']:
-                try:
-                    encoded_installation_id = urllib.parse.quote(
-                        mesh['installation_id'],
-                        safe=''
-                    )
-                    req_url = (
-                        f"https://{mesh['server_host']}:8443/status"
-                        f"?id={encoded_installation_id}"
-                    )
-                    request = urllib.request.Request(
-                        req_url,
-                        headers={
-                            'Authorization': f"Bearer {mesh['mesh_access_token']}",
-                            'Accept': 'application/json',
-                            'Cache-Control': 'no-cache',
-                        },
-                    )
-                    with urllib.request.urlopen(request, timeout=5) as response:
-                        data = json.loads(response.read().decode('utf-8'))
-                        is_active = bool(data.get('active', False))
-                except Exception as error:
-                    print(f'Secure MeshCentral Bridge Error: {error}', flush=True)
-
             send_json(self, 200, {
-                'active': is_active,
+                'active': mesh_banner_session_active(max_age=0),
                 'configured': mesh['configured'],
             })
         # -------------------------------------------------------------

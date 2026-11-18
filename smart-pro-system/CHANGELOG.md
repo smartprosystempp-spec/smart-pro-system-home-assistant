@@ -1,3 +1,8 @@
+## 3.0.38 — Guardian quiet while a technician is connected
+- Automatic offline alerts and their email wait while the technician banner is active or the manual remote-session switch is on.
+- Device monitoring continues. Alerts that are still due are sent after the session ends.
+- A bridge outage does not hide a real alarm.
+
 ## 3.0.37 — Customer panel layout
 - Portal identity, package, remaining days and sync stay in the top strip. The repeated connection bar is not shown.
 - Disconnect stays beside the Portal status. The pairing form stays only while the installation is disconnected.
