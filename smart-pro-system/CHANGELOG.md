@@ -1,3 +1,9 @@
+## 3.0.37 — Customer panel layout
+- Portal identity, package, remaining days and sync stay in the top strip. The repeated connection bar is not shown.
+- Disconnect stays beside the Portal status. The pairing form stays only while the installation is disconnected.
+- Smart Pro services and monitoring stay on the page. No service or activity dialog is opened.
+- Pairing, disconnect, entitlements and activity data are unchanged.
+
 ## 3.0.28 — Read-only collision source classification
 - A matching slug in Supervisor backup listing always blocks upload. One additional read-only GET /backups/{slug}/info (if available) classifies evidence as info_confirmed or listing_only.
 - Neither category proves identical bytes. No Restore, Delete, overwrite, new retry or cleanup authority.
