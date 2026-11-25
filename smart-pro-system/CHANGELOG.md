@@ -1,3 +1,11 @@
+## 3.0.39 — Guardian device names (customer choice)
+- New box in the Guardian panel: the customer chooses "Yes, Smart Pro can see device names" or "No, numbers only". Until they choose, only counts are sent.
+- After the choice a switch stays in the panel. Closing it stops names being sent; the Portal deletes stored names at the next check.
+- Names sent: the Home Assistant friendly name of devices that are offline or low on battery, at most 20 per check, 60 characters each. Entity IDs, credentials and network addresses are never sent.
+- The heartbeat always reports the choice (yes / no / unset) and its date. Names are held in memory only.
+- The technician settings route cannot change the customer's choice.
+- `GUARDIAN_NAMES_DEFAULT_CHOICE` in app.py is empty (ask first). It is the single switch for a pre-enabled default, only after legal review.
+
 ## 3.0.38 — Guardian quiet while a technician is connected
 - Automatic offline alerts and their email wait while the technician banner is active or the manual remote-session switch is on.
 - Device monitoring continues. Alerts that are still due are sent after the session ends.

@@ -2198,3 +2198,67 @@ function setUIPending() {
         statusMsg.classList.add('pending');
     } 
 }
+
+
+/* ---- Guardian device names: customer choice ---- */
+(function () {
+    const TEXT_ASK = 'Όταν μια συσκευή σας χάσει επικοινωνία ή έχει χαμηλή μπαταρία, μπορούμε να δούμε το όνομά της (π.χ. «Φωτισμός σαλονιού»). Έτσι σας βοηθάμε πιο γρήγορα. Δεν στέλνονται κωδικοί, διευθύνσεις δικτύου ή άλλα δεδομένα. Μέχρι να επιλέξετε, στέλνονται μόνο αριθμοί.';
+    const TEXT_YES = 'Η Smart Pro βλέπει τα ονόματα των συσκευών που έχουν χάσει επικοινωνία ή έχουν χαμηλή μπαταρία (έως 20). Δεν στέλνονται κωδικοί, διευθύνσεις δικτύου ή άλλα δεδομένα.';
+    const TEXT_NO = 'Στη Smart Pro στέλνονται μόνο αριθμοί συσκευών, χωρίς ονόματα.';
+    const NOTE_ON = 'Κλείστε το διακόπτη αν δεν θέλετε αυτή τη λειτουργία. Τα ονόματα σταματούν να στέλνονται και σβήνονται από το Portal στον επόμενο έλεγχο.';
+    const NOTE_OFF = 'Ανοίξτε το διακόπτη αν θέλετε να βλέπει η Smart Pro τα ονόματα για πιο γρήγορη βοήθεια.';
+    const $ = (id) => document.getElementById(id);
+
+    function render(choice, chosenAt) {
+        const box = $('guardianNamesBox');
+        if (!box) return;
+        const ask = choice !== 'yes' && choice !== 'no';
+        box.hidden = false;
+        $('guardianNamesText').textContent = ask ? TEXT_ASK : (choice === 'yes' ? TEXT_YES : TEXT_NO);
+        $('guardianNamesChoose').hidden = !ask;
+        $('guardianNamesSwitchRow').hidden = ask;
+        const note = $('guardianNamesNote');
+        note.hidden = ask;
+        if (!ask) {
+            $('guardianNamesSwitch').checked = choice === 'yes';
+            $('guardianNamesSwitchState').textContent = choice === 'yes' ? 'ενεργό' : 'κλειστό';
+            let when = '';
+            if (chosenAt) {
+                try { when = ' (επιλογή: ' + new Date(chosenAt * 1000).toLocaleDateString('el-GR') + ')'; } catch (e) { when = ''; }
+            }
+            note.textContent = (choice === 'yes' ? NOTE_ON : NOTE_OFF) + when;
+        }
+    }
+
+    async function load() {
+        try {
+            const response = await fetch(portalCurrentPath() + 'api/guardian_names', { cache: 'no-store' });
+            if (!response.ok) return;
+            const data = await response.json();
+            render(data.choice, data.chosen_at);
+        } catch (error) { console.error(error); }
+    }
+
+    async function save(choice) {
+        const buttons = [$('guardianNamesYes'), $('guardianNamesNo'), $('guardianNamesSwitch')];
+        buttons.forEach((b) => { if (b) b.disabled = true; });
+        try {
+            const response = await fetch(portalCurrentPath() + 'api/guardian_names', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ choice })
+            });
+            const data = await response.json();
+            if (response.ok) render(data.choice, data.chosen_at); else await load();
+        } catch (error) { console.error(error); await load(); }
+        buttons.forEach((b) => { if (b) b.disabled = false; });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const yes = $('guardianNamesYes'), no = $('guardianNamesNo'), sw = $('guardianNamesSwitch');
+        if (yes) yes.addEventListener('click', () => save('yes'));
+        if (no) no.addEventListener('click', () => save('no'));
+        if (sw) sw.addEventListener('change', () => save(sw.checked ? 'yes' : 'no'));
+        load();
+    });
+})();

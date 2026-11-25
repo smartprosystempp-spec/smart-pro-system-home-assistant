@@ -38,6 +38,11 @@ An offline incident is not marked alerted until the Portal acknowledges the auto
 ## Persistence
 Real offline and low-battery state is stored locally in `/data/guardian_state.json` with mode 0600. Virtual safe-test entities are never persisted.
 
+## Device names (opt-in, v2.1)
+The heartbeat always carries `device_names_consent` (yes / no / unset) and `device_names_consent_at`.
+Only when the customer has explicitly chosen "yes" does it also carry `device_names` = `{offline: [...], low_battery: [...]}`: the Home Assistant friendly names of affected devices, at most 20 in total, 60 characters each, held in memory only. The Portal must ignore names unless consent is `yes` and must delete stored names when consent is `no` or `unset`. Automatic request and email text keeps the bounded `<domain> · ref <hash>` reference.
+The choice is made by the customer in the Smart Pro Tools Guardian panel. The technician settings route cannot change it. Default behaviour is controlled by `GUARDIAN_NAMES_DEFAULT_CHOICE` (empty = ask first); changing it requires legal review.
+
 ## Privacy boundary
 Raw Home Assistant entity IDs stay local. Automatic Guardian request/email text uses a bounded `<domain> · ref <hash>` reference. No credentials, tokens or raw diagnostic payloads are sent by this contract.
 

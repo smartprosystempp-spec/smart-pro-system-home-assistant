@@ -1516,6 +1516,57 @@ def guardian_safe_device_ref(entity_id):
     return f'{domain} · ref {digest}'
 
 
+# Default for installations where the customer has not chosen yet.
+# '' = ask the customer first (only counts are sent until they choose).
+# Set to 'yes' only after legal review confirms a pre-enabled default is allowed.
+GUARDIAN_NAMES_DEFAULT_CHOICE = ''
+GUARDIAN_NAMES_MAX_TOTAL = 20
+GUARDIAN_NAMES_MAX_LEN = 60
+GUARDIAN_DEVICE_NAMES = {'offline': [], 'low_battery': []}
+GUARDIAN_DEVICE_NAMES_LOCK = threading.Lock()
+
+
+def guardian_names_effective_choice(tech_config=None):
+    tech_config = tech_config or load_tech_settings()
+    choice = str(tech_config.get('guardian_names_choice', '') or '').strip().lower()
+    if choice in ('yes', 'no'):
+        return choice
+    return GUARDIAN_NAMES_DEFAULT_CHOICE if GUARDIAN_NAMES_DEFAULT_CHOICE in ('yes', 'no') else ''
+
+
+def guardian_clean_device_name(value, fallback=''):
+    text = re.sub(r'[\x00-\x1f\x7f]+', ' ', str(value or ''))
+    text = re.sub(r'\s+', ' ', text).strip()
+    if not text:
+        text = re.sub(r'\s+', ' ', str(fallback or '')).strip()
+    return text[:GUARDIAN_NAMES_MAX_LEN]
+
+
+def guardian_remember_device_names(offline_names, battery_names):
+    """Keep the latest friendly names in memory only. Nothing is written to disk."""
+    with GUARDIAN_DEVICE_NAMES_LOCK:
+        GUARDIAN_DEVICE_NAMES['offline'] = [n for n in offline_names if n]
+        GUARDIAN_DEVICE_NAMES['low_battery'] = [n for n in battery_names if n]
+
+
+def guardian_names_heartbeat_block(tech_config=None):
+    """Consent state is always reported. Names are included only after a clear 'yes'."""
+    tech_config = tech_config or load_tech_settings()
+    choice = guardian_names_effective_choice(tech_config)
+    block = {
+        'device_names_consent': choice or 'unset',
+        'device_names_consent_at': int(tech_config.get('guardian_names_choice_at', 0) or 0),
+    }
+    if choice == 'yes':
+        with GUARDIAN_DEVICE_NAMES_LOCK:
+            offline = list(GUARDIAN_DEVICE_NAMES['offline'])
+            battery = list(GUARDIAN_DEVICE_NAMES['low_battery'])
+        offline = offline[:GUARDIAN_NAMES_MAX_TOTAL]
+        battery = battery[:max(0, GUARDIAN_NAMES_MAX_TOTAL - len(offline))]
+        block['device_names'] = {'offline': offline, 'low_battery': battery}
+    return block
+
+
 def update_guardian_status(**updates):
     allowed_statuses = {'healthy', 'attention', 'disabled', 'waiting', 'error'}
     string_keys = {'reason_code', 'last_alert_request_code'}
@@ -4255,7 +4306,7 @@ def _portal_heartbeat_payload(home_assistant_snapshot=None, diagnostic_check_ack
     payload = {
         'addon_version': ADDON_VERSION,
         'device_name': 'Home Assistant',
-        'guardian': guardian_status_snapshot(),
+        'guardian': dict(guardian_status_snapshot(), **guardian_names_heartbeat_block()),
         'technician_center': technician_center_portal_snapshot(),
         'command_channel': command_channel_snapshot(),
         'managed_backup': managed_backup_agent_heartbeat_snapshot(),
@@ -4434,6 +4485,11 @@ DEFAULT_TECH_SETTINGS = {
     "vacation_audio": [],
     "subscription_active": True,
     "managed_remote_support_manual_pause": False,
+
+    # Customer choice about sharing Guardian device names with Smart Pro.
+    # '' = not chosen yet (only counts are sent), 'yes' or 'no'.
+    "guardian_names_choice": "",
+    "guardian_names_choice_at": 0,
     
     # --- MESHCENTRAL BANNER SETTINGS ---
     "mesh_banner_enabled": False,
@@ -4496,6 +4552,12 @@ def _normalize_tech_settings(data):
     normalized['battery_limit'] = round(clamp_number(
         normalized.get('battery_limit', 15.0), 15.0, 1.0, 100.0
     ), 2)
+    _names_choice = str(normalized.get('guardian_names_choice', '') or '').strip().lower()
+    normalized['guardian_names_choice'] = _names_choice if _names_choice in ('yes', 'no') else ''
+    try:
+        normalized['guardian_names_choice_at'] = max(0, int(normalized.get('guardian_names_choice_at', 0) or 0))
+    except (TypeError, ValueError):
+        normalized['guardian_names_choice_at'] = 0
     normalized['watchdog_test_delay_sec'] = int(round(clamp_number(
         normalized.get('watchdog_test_delay_sec', 10), 10, 3, 300
     )))
@@ -7557,6 +7619,16 @@ def watchdog_loop():
                         except (TypeError, ValueError):
                             pass
 
+                _name_by_id = {}
+                for _entity in states:
+                    _eid = str(_entity.get('entity_id', '') or '')
+                    _attrs = _entity.get('attributes', {}) if isinstance(_entity.get('attributes'), dict) else {}
+                    _name_by_id[_eid] = guardian_clean_device_name(_attrs.get('friendly_name'), _eid)
+                guardian_remember_device_names(
+                    [_name_by_id.get(e, '') for e in current_offline],
+                    [_name_by_id.get(e, '') for e in current_low_batt],
+                )
+
                 recovered = []
                 for entity_id in current_offline:
                     if entity_id not in OFFLINE_DEVICES:
@@ -7801,6 +7873,13 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             except PortalAPIError as error:
                 send_json(self, error.status or 502, {'status': 'error', 'code': error.code, 'message': str(error)})
 
+        elif request_path.endswith('/api/guardian_names'):
+            _cfg = load_tech_settings()
+            send_json(self, 200, {
+                'status': 'success',
+                'choice': guardian_names_effective_choice(_cfg) or 'unset',
+                'chosen_at': int(_cfg.get('guardian_names_choice_at', 0) or 0),
+            })
         elif request_path.endswith('/api/tech_settings'):
             # Browser-facing settings are always sanitized. Stored SMTP
             # credentials never leave the add-on, even during a technician session.
@@ -7981,6 +8060,26 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             if settings.get('subscription_active') is not derived:
                 save_tech_settings({'subscription_active':derived})
             send_json(self, 200, {'status':'success','active':derived,'source':'legacy_local_derived'})
+        elif urllib.parse.urlparse(self.path).path.endswith('/api/guardian_names'):
+            try:
+                data = read_json_body(self, max_bytes=256)
+                choice = str(data.get('choice', '') if isinstance(data, dict) else '').strip().lower()
+                if choice not in ('yes', 'no'):
+                    raise ValueError('invalid_choice')
+            except (ValueError, TypeError):
+                send_json(self, 400, {'status': 'error', 'code': 'invalid_choice'})
+                return
+            saved = save_tech_settings({
+                'guardian_names_choice': choice,
+                'guardian_names_choice_at': int(time.time()),
+            }, merge=True)
+            if choice == 'no':
+                guardian_remember_device_names([], [])
+            send_json(self, 200, {
+                'status': 'success',
+                'choice': guardian_names_effective_choice(saved) or 'unset',
+                'chosen_at': int(saved.get('guardian_names_choice_at', 0) or 0),
+            })
         elif urllib.parse.urlparse(self.path).path.endswith('/api/tech_settings'):
             try:
                 data = read_json_body(self)
@@ -7997,6 +8096,9 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                 # never receives the stored password and therefore cannot echo it.
                 if 'email_password' in data and not str(data.get('email_password', '') or '').strip():
                     data.pop('email_password', None)
+                # The device-name choice belongs to the customer only; this route cannot change it.
+                data.pop('guardian_names_choice', None)
+                data.pop('guardian_names_choice_at', None)
                 saved = save_tech_settings(data, merge=True)
                 send_json(self, 200, {'status': 'success', 'settings': tech_settings_public(saved)})
             except Exception as error:
