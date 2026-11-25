@@ -223,3 +223,8 @@ body.sps-vnext.sps-customer-v1 {
 .sps-customer-v1.sps-customer-compact .sps-activity{margin-top:0;border-top:1px solid #24384c;border-top-left-radius:0;border-top-right-radius:0}
 .sps-customer-v1.sps-customer-compact .sps-activity>summary{pointer-events:none;cursor:default;list-style:none}
 .sps-customer-v1.sps-customer-compact .sps-activity>summary::-webkit-details-marker{display:none}
+
+/* 3.0.40 — device-names choice box in the customer view */
+.sps-customer-v1 .sps-health .guardian-names--panel{margin:10px 0 0;background:#152b3c;border:1px solid #326e91;color:#c1e9fa}
+.sps-customer-v1 .sps-health .guardian-names__btn{background:#10202e;color:#c1e9fa;border-color:#326e91}
+.sps-customer-v1 .sps-health .guardian-names__btn--yes{background:#1976d2;color:#fff;border-color:#1976d2}

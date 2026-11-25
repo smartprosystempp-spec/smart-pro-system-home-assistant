@@ -1,3 +1,6 @@
+## 3.0.40 — Device-names box visible to the customer
+- The choice box moved out of the technician-only panel (hidden in the customer view) to sit under the monitoring status message.
+
 ## 3.0.39 — Guardian device names (customer choice)
 - New box in the Guardian panel: the customer chooses "Yes, Smart Pro can see device names" or "No, numbers only". Until they choose, only counts are sent.
 - After the choice a switch stays in the panel. Closing it stops names being sent; the Portal deletes stored names at the next check.

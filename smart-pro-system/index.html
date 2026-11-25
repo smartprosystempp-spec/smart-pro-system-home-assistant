@@ -119,6 +119,19 @@
                 <div class="scanner-text" id="scannerText">Έναρξη διαγνωστικού ελέγχου...</div>
             </div>
             <div class="status" id="statusMessage">Γίνεται έλεγχος κατάστασης συστήματος...</div>
+                        <div class="guardian-names guardian-names--panel" id="guardianNamesBox" hidden>
+                            <div class="guardian-names__title">Ονόματα συσκευών προς τη Smart Pro</div>
+                            <p class="guardian-names__text" id="guardianNamesText"></p>
+                            <div class="guardian-names__actions" id="guardianNamesChoose" hidden>
+                                <button type="button" class="guardian-names__btn guardian-names__btn--yes" id="guardianNamesYes">Ναι, να βλέπει η Smart Pro τα ονόματα</button>
+                                <button type="button" class="guardian-names__btn" id="guardianNamesNo">Όχι, μόνο αριθμούς</button>
+                            </div>
+                            <label class="guardian-names__switch" id="guardianNamesSwitchRow" hidden>
+                                <input type="checkbox" id="guardianNamesSwitch">
+                                <span>Ονόματα συσκευών: <strong id="guardianNamesSwitchState">κλειστό</strong></span>
+                            </label>
+                            <div class="guardian-names__note" id="guardianNamesNote" hidden></div>
+                        </div>
             <div class="dashboard-grid" id="mainDashboard" style="display:none;">
                 <div class="info-panel">
                     <h4>Πληροφορίες συστήματος</h4>
@@ -134,19 +147,6 @@
                 <div class="info-panel">
                     <h4>Guardian</h4>
                     <div class="health-row" id="watchdogStateRow"><span id="wdIcon">●</span> <span class="text" id="wdText">Guardian: Έλεγχος...</span></div>
-                    <div class="guardian-names" id="guardianNamesBox" hidden>
-                        <div class="guardian-names__title">Ονόματα συσκευών προς τη Smart Pro</div>
-                        <p class="guardian-names__text" id="guardianNamesText"></p>
-                        <div class="guardian-names__actions" id="guardianNamesChoose" hidden>
-                            <button type="button" class="guardian-names__btn guardian-names__btn--yes" id="guardianNamesYes">Ναι, να βλέπει η Smart Pro τα ονόματα</button>
-                            <button type="button" class="guardian-names__btn" id="guardianNamesNo">Όχι, μόνο αριθμούς</button>
-                        </div>
-                        <label class="guardian-names__switch" id="guardianNamesSwitchRow" hidden>
-                            <input type="checkbox" id="guardianNamesSwitch">
-                            <span>Ονόματα συσκευών: <strong id="guardianNamesSwitchState">κλειστό</strong></span>
-                        </label>
-                        <div class="guardian-names__note" id="guardianNamesNote" hidden></div>
-                    </div>
                     <div class="health-row" id="netHealth"><span>●</span> <span class="text">Internet: χωρίς ξεχωριστό probe</span></div>
                     <div class="health-row" id="uptimeHealth"><span>●</span> <span class="text" id="uptimeText">Συνεχής λειτουργία</span></div>
                     <div class="health-row" id="deviceHealth"><span>●</span> <span class="text" id="deviceHealthText">Έλεγχος...</span></div>
