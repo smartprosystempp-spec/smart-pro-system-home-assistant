@@ -1,3 +1,7 @@
+## 3.0.41 — Customer alert badge text
+- The yellow device badge now shows only its headline ("1 συσκευή εκτός σύνδεσης"). The collapsible device list is no longer glued onto it.
+- Singular wording for one offline device.
+
 ## 3.0.40 — Device-names box visible to the customer
 - The choice box moved out of the technician-only panel (hidden in the customer view) to sit under the monitoring status message.
 

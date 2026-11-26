@@ -145,7 +145,10 @@
         alerts.replaceChildren();
         for (const node of watch) {
           if (!node.classList.contains('warning') && !node.classList.contains('error')) continue;
-          const label = (node.innerText || node.textContent || '').replace(/^[●✔✓⚠️\s]+/u,'').trim();
+          // Only the headline: the collapsible device list (details) is not part of the badge.
+          const headline = node.cloneNode(true);
+          headline.querySelectorAll('details, ul').forEach((part) => part.remove());
+          const label = (headline.textContent || '').replace(/^[●✔✓⚠️\s]+/u,'').replace(/\s+/g,' ').trim();
           if (!label) continue;
           const badge = document.createElement('span');
           badge.textContent = label.length > 110 ? label.slice(0,108)+'…' : label;

@@ -1287,7 +1287,7 @@ function updateHealthUI(offline, batteries, watchdogEnabled, offlineList = [], b
         devBox.className = 'health-row error'; 
         let listHTML = `<details style="margin-top: 5px; cursor: pointer; text-align: left; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; font-size: 0.9em;"><summary style="font-weight: bold;">Συσκευές (${offline})</summary><ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">`;
         offlineList.forEach(dev => { listHTML += `<li style="padding: 2px 0;">${dev}</li>`; }); listHTML += `</ul></details>`;
-        devText.innerHTML = `<strong>${offline} συσκευές εκτός σύνδεσης</strong><br>${listHTML}`;
+        devText.innerHTML = `<strong>${offline} ${offline === 1 ? 'συσκευή εκτός σύνδεσης' : 'συσκευές εκτός σύνδεσης'}</strong><br>${listHTML}`;
         
         if (guardianAllowed && watchdogEnabled && tamperList.length === 0) { statusMsg.innerHTML = "⚠️ <strong>Εντοπίστηκε απώλεια.</strong> Ο Φρουρός τη διαχειρίζεται αυτόματα. Μπορείτε παράλληλα να ανοίξετε ξεχωριστό αίτημα υποστήριξης."; statusMsg.className = 'status pending'; if (!hasPendingRequest) { supportBtn.innerText = "👨‍🔧 Αίτημα Υποστήριξης"; supportBtn.classList.remove('sent'); supportBtn.style.pointerEvents = 'auto'; } } 
         else if (tamperList.length === 0) { statusMsg.innerHTML = "⚠️ <strong>Εντοπίστηκε σφάλμα.</strong> Πατήστε το κουμπί."; statusMsg.className = 'status pending'; if (!hasPendingRequest) { supportBtn.innerText = "👨‍🔧 Αίτημα Υποστήριξης"; supportBtn.classList.remove('sent'); supportBtn.style.pointerEvents = 'auto'; } }
